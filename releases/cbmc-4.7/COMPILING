@@ -1,0 +1,144 @@
+What architecture?
+------------------
+
+CPROVER compiles in the following environments:
+
+- Linux
+
+- MacOS X
+
+- Cygwin
+  (We recommend g++-3. Don't use the i686-pc-mingw32-g++ cross compiler.)
+
+- Microsoft's Visual Studio 2010 or 2012 (older versions won't work)
+
+The rest of this document is split up into three parts: compilation on
+Linux, MacOS, Windows.  Please read the section appropriate for your
+machine.
+
+
+COMPILATION ON LINUX
+--------------------
+
+We assume that you have a Debian/Ubuntu or Red Hat-like distribution.
+
+0) You need a C/C++ compiler, Flex and Bison, and GNU make.
+   The GNU Make needs to be version 3.81 or higher. On Debian-like
+   distributions, do
+
+   apt-get install g++ gcc flex bison make subversion libz-dev libwww-perl patch
+
+   On Red Hat/Fedora, do
+
+   yum install gcc gcc-c++ flex bison perl-libwww-perl patch
+
+   WARNING: g++ 4.5.x has been observed to mis-optimize code in
+   MiniSat with -O3. Use a different version (or -O1).
+
+1) You need a SAT solver (in source). We recommend MiniSat2. Do
+
+   cd src
+   make minisat2-download
+
+2) Type make - that should do it.
+
+
+COMPILATION ON SOLARIS 11
+-------------------------
+
+0) Install the relevant development tools as root:
+
+   pkg install developer/versioning/subversion flex bison gcc-3
+
+1) As a user, get MiniSat2 by entering
+
+   cd src
+   wget http://minisat.se/downloads/minisat-2.2.0.tar.gz
+   gtar xfz minisat-2.2.0.tar.gz
+   mv minisat ../minisat-2.2.0
+   (cd ../minisat-2.2.0; patch -p1 < ../scripts/minisat-2.2.0-patch)
+
+2) Adjust util/hash_cont.h to use STL_HASH_GNU
+
+3) Type
+
+   gmake CXX=/usr/sfw/bin/g++
+
+   That should do it. Do not compile with gcc-45. It will mis-optimize
+   MiniSat2.
+
+
+COMPILATION ON MACOS X
+----------------------
+
+Follow these instructions:
+
+0) You need a C/C++ compiler, Flex and Bison, and GNU make. To this
+   end, install the XCode command-line utilities (installing XCode is
+   not enough). These are available at
+
+   https://developer.apple.com/downloads/
+
+1) You need a SAT solver (in source). We recommend MiniSat2. Do
+
+   cd src
+   make minisat2-download
+
+2) Type cd src; make - that should do it.
+
+
+COMPILATION ON WINDOWS
+----------------------
+
+There are two options: compilation using g++ from Cygwin, or using
+Visual Studio's compiler. As Cygwin has significant overhead during
+process creation, we advise you use Visual Studio.
+
+Follow these instructions:
+
+0) You need a C/C++ compiler, Flex and Bison, GNU tar, gzip2,
+   GNU make, and patch. The GNU Make needs to be version 3.81 or
+   higher.  If you don't already have the above, we recommend you install
+   Cygwin.
+
+   WARNING: g++ 4.5.x has been observed to mis-optimize code in
+   MiniSat with -O3. Use a different version (or -O1).
+
+1) You need a SAT solver (in source). We recommend MiniSat2. Using a
+   browser, download from
+
+   http://minisat.se/downloads/minisat-2.2.0.tar.gz
+
+   and then unpack with
+
+   tar xfz minisat-2.2.0.tar.gz
+   mv minisat minisat-2.2.0
+   cd minisat-2.2.0
+   patch -p1 < scripts/minisat-2.2.0-patch
+
+   The patch removes the dependency on zlib and prevents a problem
+   with a header file that is often unavailable on Windows.
+
+2) Adjust src/config.inc for the paths to item 1).
+
+3A) To compile with Cygwin, install the mingw compilers, and adjust
+   the second line of config.inc to say
+
+   BUILD_ENV = MinGW
+
+3B) To compile with Visual Studio, make sure you have at least Visual
+   Studio 10, and adjust the second line of config.inc to say
+
+   BUILD_ENV = MSVC
+
+   Open the Visual Studio Command prompt, and then run the make.exe
+   from Cygwin from in there.
+
+4) Type cd src; make - that should do it.
+   Note that "nmake" is not expected to work. Use "make".
+
+(Optional) A Visual Studio project file can be generated with the script
+"generate_vcxproj" that is in the subdirectory "scripts".  The project file
+is helpful for GUI-based tasks, e.g., the class viewer, debugging, etc., and
+can be used for building with MSBuild.  Note that you still need to run
+flex/bison using "make generated_files" before opening the project.
