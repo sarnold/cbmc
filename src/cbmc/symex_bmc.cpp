@@ -10,8 +10,16 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/location.h>
 #include <util/i2string.h>
+#include <util/xml.h>
+#include <goto-programs/goto_trace.h>
+#include <goto-symex/build_goto_trace.h>
+#include <solvers/sat/satcheck.h>
+#include <solvers/sat/satcheck_minisat2.h>
+#include <solvers/prop/literal.h>
 
 #include "symex_bmc.h"
+#include "bv_cbmc.h"
+#include <iostream>
 
 /*******************************************************************\
 
@@ -28,25 +36,30 @@ Function: symex_bmct::symex_bmct
 symex_bmct::symex_bmct(
   const namespacet &_ns,
   symbol_tablet &_new_symbol_table,
-  symex_targett &_target):
+  symex_targett &_target,
+  prop_convt& _prop_conv):
   goto_symext(_ns, _new_symbol_table, _target),
+  is_incremental(false),
+  prop_conv(_prop_conv),
+  ui(ui_message_handlert::PLAIN),
   max_unwind_is_set(false)
 {
 }
+
 
 /*******************************************************************\
 
 Function: symex_bmct::symex_step
 
-  Inputs:
+  Inputs: goto functions, current symbolic execution state
 
- Outputs:
+ Outputs: true if symbolic execution is to be interrupted to perform incremental checking
 
  Purpose: show progress
 
 \*******************************************************************/
 
-void symex_bmct::symex_step(
+bool symex_bmct::symex_step(
   const goto_functionst &goto_functions,
   statet &state)
 {
@@ -62,18 +75,100 @@ void symex_bmct::symex_step(
     last_location=location;
   }
 
-  goto_symext::symex_step(goto_functions, state);
+  return goto_symext::symex_step(goto_functions, state);
 }
+
+/*******************************************************************\
+
+Function: symex_bmct::check_break
+
+ Inputs: source of the current symbolic execution state
+
+ Outputs: true if the back edge encountered during symbolic execution 
+            corresponds to the given loop (incr_loop_id)
+
+ Purpose: defines condition for interrupting symbolic execution 
+            for incremental BMC
+
+\*******************************************************************/
+
+bool symex_bmct::check_break(statet& state, const exprt &cond, 
+                             unsigned unwind) 
+{
+  if(!is_incremental) return false;
+  if(unwind < incr_min_unwind) return false;
+
+  const irep_idt id=goto_programt::loop_id(state.source.pc);
+  loop_limitst &this_thread_limits=
+    thread_loop_limits[state.source.thread_nr];
+  if(incr_loop_id=="" && 
+     this_thread_limits.find(id)==this_thread_limits.end() &&
+     loop_limits.find(id)==loop_limits.end()) 
+  {
+    //not a statically unwound loop when --incremental
+
+    //memorise unwinding assertion for loop check
+    exprt simplified_cond=not_exprt(cond);
+    state.rename(simplified_cond, ns);
+    do_simplify(simplified_cond);
+    state.guard.guard_expr(simplified_cond);
+
+    loop_cond.id = id;
+    loop_cond.cond = simplified_cond;
+    loop_cond.guard = state.guard.as_expr();
+    loop_cond.loop_info = &(state.top().loop_iterations[id]);
+    loop_cond.source = state.source;
+
+    return true;
+  }
+
+  //loop specified by --incremental-check
+  return (id == incr_loop_id);
+}
+
+bool symex_bmct::add_loop_check()
+{
+  if(loop_cond.id=="") return false;
+
+  status() << "Checking loop " << loop_cond.id << eom;
+
+#if 0
+  debug() << "Loop condition: " << from_expr(ns,"",loop_cond.cond) << eom;
+#endif
+
+  if(loop_cond.cond.is_false()) 
+  {
+    debug() << "Loop " << loop_cond.id << " not fully unwound" << eom;
+    return false;
+  }
+
+  target.assertion(loop_cond.guard, loop_cond.cond, 
+    "loop_condition_check", loop_cond.source);
+
+  return true;
+}
+
+void symex_bmct::update_loop_info(bool fully_unwound)
+{
+  if(loop_cond.id=="") return;
+
+  status() << "Loop " << loop_cond.id 
+	  << (fully_unwound ? " fully unwound" : " not fully unwound") << eom;
+
+  loop_cond.loop_info->fully_unwound = fully_unwound;
+  loop_cond.id = "";
+}
+
 
 /*******************************************************************\
 
 Function: symex_bmct::get_unwind
 
-  Inputs:
+  Inputs: source of the current symbolic execution state, symex unwind counter
 
- Outputs:
+ Outputs: true if loop bound has been exceeded 
 
- Purpose:
+ Purpose: check whether loop bound for current loop has been reached
 
 \*******************************************************************/
 
@@ -103,7 +198,26 @@ bool symex_bmct::get_unwind(
       this_loop_limit=max_unwind;
   }
 
+  // use the incremental limits if 
+  // it is the specified incremental loop or
+  // there was no non-incremental limit
+  if(id==incr_loop_id || 
+     (incr_loop_id=="" && is_incremental && 
+      this_loop_limit==std::numeric_limits<unsigned>::max()))
+  {
+    this_loop_limit = incr_max_unwind;
+    if(unwind+1>=incr_min_unwind) ignore_assertions = false;
+  }
+
   bool abort=unwind>=this_loop_limit;
+
+  // report where we are  
+  if(ui==ui_message_handlert::XML_UI)
+  {
+    xmlt xml("current-unwinding");
+    xml.data=i2string(unwind);
+    std::cout << xml << "\n";
+  }
 
   statistics() << (abort?"Not unwinding":"Unwinding")
                << " loop " << id << " iteration "
@@ -114,7 +228,6 @@ bool symex_bmct::get_unwind(
 
   statistics() << " " << source.pc->location
                << " thread " << source.thread_nr << eom;
-
   return abort;
 }
 
@@ -153,6 +266,12 @@ bool symex_bmct::get_unwind_recursion(
       this_loop_limit=l_it->second;
     else if(max_unwind_is_set)
       this_loop_limit=max_unwind;
+  }
+
+  if(id==incr_loop_id || (incr_loop_id=="" && is_incremental))
+  {
+    this_loop_limit = incr_max_unwind;
+    if(unwind+1>=incr_min_unwind) ignore_assertions = false;
   }
 
   bool abort=unwind>this_loop_limit;

@@ -26,21 +26,20 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/message_stream.h>
 #include <util/tempfile.h>
 #include <util/unicode.h>
-#include <util/arith_tools.h>
-#include <util/std_types.h>
 
-#include "c_types.h"
 #include "c_preprocess.h"
 
 #define GCC_DEFINES_16 \
   " -D__INT_MAX__=32767"\
   " -D__CHAR_BIT__=8"\
+  " -D__WCHAR_MAX__=32767"\
   " -D__SCHAR_MAX__=127"\
   " -D__SHRT_MAX__=32767"\
   " -D__LONG_LONG_MAX__=2147483647L"\
   " -D__LONG_MAX__=2147483647" \
   " -D__SIZE_TYPE__=\"unsigned int\""\
   " -D__PTRDIFF_TYPE__=int"\
+  " -D__WCHAR_TYPE__=int"\
   " -D__WINT_TYPE__=\"unsigned int\""\
   " -D__INTMAX_TYPE__=\"long long int\""\
   " -D__UINTMAX_TYPE__=\"long long unsigned int\""
@@ -48,12 +47,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #define GCC_DEFINES_32 \
   " -D__INT_MAX__=2147483647"\
   " -D__CHAR_BIT__=8"\
+  " -D__WCHAR_MAX__=2147483647"\
   " -D__SCHAR_MAX__=127"\
   " -D__SHRT_MAX__=32767"\
   " -D__LONG_LONG_MAX__=9223372036854775807LL"\
   " -D__LONG_MAX__=2147483647L" \
   " -D__SIZE_TYPE__=\"long unsigned int\""\
   " -D__PTRDIFF_TYPE__=int"\
+  " -D__WCHAR_TYPE__=int"\
   " -D__WINT_TYPE__=\"unsigned int\""\
   " -D__INTMAX_TYPE__=\"long long int\""\
   " -D__UINTMAX_TYPE__=\"long long unsigned int\""
@@ -61,39 +62,17 @@ Author: Daniel Kroening, kroening@kroening.com
 #define GCC_DEFINES_LP64 \
   " -D__INT_MAX__=2147483647"\
   " -D__CHAR_BIT__=8"\
+  " -D__WCHAR_MAX__=2147483647"\
   " -D__SCHAR_MAX__=127"\
   " -D__SHRT_MAX__=32767"\
   " -D__LONG_LONG_MAX__=9223372036854775807LL"\
   " -D__LONG_MAX__=9223372036854775807L"\
   " -D__SIZE_TYPE__=\"long unsigned int\""\
   " -D__PTRDIFF_TYPE__=long"\
+  " -D__WCHAR_TYPE__=int"\
   " -D__WINT_TYPE__=\"unsigned int\""\
   " -D__INTMAX_TYPE__=\"long int\""\
   " -D__UINTMAX_TYPE__=\"long unsigned int\""
-
-/*******************************************************************\
-
-Function: type_max
-
-  Inputs:
-
- Outputs:
-
- Purpose: produce a string with the maximum value of a given type
-
-\*******************************************************************/
-
-static std::string type_max(const typet &src)
-{
-  if(src.id()==ID_signedbv)
-    return integer2string(
-      power(2, to_signedbv_type(src).get_width()-1)-1);
-  else if(src.id()==ID_unsignedbv)
-    return integer2string(
-      power(2, to_unsignedbv_type(src).get_width()-1)-1);
-  else
-    assert(false);
-}
 
 /*******************************************************************\
 
@@ -314,53 +293,50 @@ bool c_preprocess_visual_studio(
     // understands.
     command_file << char(0xef) << char(0xbb) << char(0xbf);
   
-    command_file << "/nologo" << "\n";
-    command_file << "/E" << "\n";
-    command_file << "/D__CPROVER__" << "\n";
-    command_file << "/D__WORDSIZE=" << config.ansi_c.pointer_width << "\n";
+    command_file << "/nologo" << std::endl;
+    command_file << "/E" << std::endl;
+    command_file << "/D__CPROVER__" << std::endl;
+    command_file << "/D__WORDSIZE=" << config.ansi_c.pointer_width << std::endl;
 
     if(config.ansi_c.pointer_width==64)
     {
-      command_file << "\"/D__PTRDIFF_TYPE__=long long int\""  << "\n";
+      command_file << "\"/D__PTRDIFF_TYPE__=long long int\""  << std::endl;
       // yes, both _WIN32 and _WIN64 get defined
-      command_file << "/D_WIN64" << "\n";
+      command_file << "/D_WIN64" << std::endl;
     }
     else
     {
-      command_file << "/D__PTRDIFF_TYPE__=int" << "\n";
-      command_file << "/U_WIN64" << "\n";
+      command_file << "/D__PTRDIFF_TYPE__=int" << std::endl;
+      command_file << "/U_WIN64" << std::endl;
     }
 
-    if(config.ansi_c.char_is_unsigned)
-      command_file << "/J" << "\n"; // This causes _CHAR_UNSIGNED to be defined
-
     // Standard Defines, ANSI9899 6.10.8
-    command_file << "/D__STDC_VERSION__=199901L" << "\n";
-    command_file << "/D__STDC_IEC_559__=1" << "\n";
-    command_file << "/D__STDC_IEC_559_COMPLEX__=1" << "\n";
-    command_file << "/D__STDC_ISO_10646__=1" << "\n";
+    command_file << "/D__STDC_VERSION__=199901L" << std::endl;
+    command_file << "/D__STDC_IEC_559__=1" << std::endl;
+    command_file << "/D__STDC_IEC_559_COMPLEX__=1" << std::endl;
+    command_file << "/D__STDC_ISO_10646__=1" << std::endl;
   
     for(std::list<std::string>::const_iterator
         it=config.ansi_c.defines.begin();
         it!=config.ansi_c.defines.end();
         it++)
-      command_file << "/D" << shell_quote(*it) << "\n";
+      command_file << "/D" << shell_quote(*it) << std::endl;
 
     for(std::list<std::string>::const_iterator
         it=config.ansi_c.include_paths.begin();
         it!=config.ansi_c.include_paths.end();
         it++)
-      command_file << "/I" << shell_quote(*it) << "\n";
+      command_file << "/I" << shell_quote(*it) << std::endl;
 
        for(std::list<std::string>::const_iterator
                it=config.ansi_c.include_files.begin();
                it!=config.ansi_c.include_files.end();
                it++)
-         command_file << "/FI" << shell_quote(*it) << "\n";
+         command_file << "/FI" << shell_quote(*it) << std::endl;
 
     // Finally, the file to be preprocessed
     // (this is already in UTF-8).
-    command_file << shell_quote(file) << "\n";
+    command_file << shell_quote(file) << std::endl;
   }
   
   std::string tmpi=get_temporary_file("tmp.cl", "");
@@ -456,10 +432,10 @@ void postprocess_codewarrior(
     else if(line.size()>=3 &&
             line[0]=='/' && line[1]=='*' && line[2]==' ')
     {
-      outstream << line.c_str()+3 << "\n"; // strip the '/* '
+      outstream << line.c_str()+3 << std::endl; // strip the '/* '
     }
     else
-      outstream << line << "\n";
+      outstream << line << std::endl;
   }
 }
 
@@ -689,26 +665,9 @@ bool c_preprocess_gcc(
     if(config.ansi_c.pointer_width==64)
       command+=GCC_DEFINES_LP64;
     else
-      command+=GCC_DEFINES_32;
+    command+=GCC_DEFINES_32;
   }
   
-  // The width of wchar_t depends on the OS!
-  {
-    command+=" -D__WCHAR_MAX__="+type_max(wchar_t_type());
-
-    std::string sig=config.ansi_c.wchar_t_is_unsigned?"unsigned":"signed";
-    
-    if(config.ansi_c.wchar_t_width==config.ansi_c.short_int_width)
-      command+=" -D__WCHAR_TYPE__=\""+sig+" short int\"";
-    else if(config.ansi_c.wchar_t_width==config.ansi_c.int_width)
-      command+=" -D__WCHAR_TYPE__=\""+sig+" int\"";
-    else
-      assert(false);
-  }
-
-  if(config.ansi_c.char_is_unsigned)
-    command+=" -D __CHAR_UNSIGNED__"; // gcc
-
   switch(config.ansi_c.os)
   {
   case configt::ansi_ct::OS_LINUX:
@@ -724,8 +683,8 @@ bool c_preprocess_gcc(
     break;
 
   case configt::ansi_ct::OS_WIN:
+    command+=" -D _MSC_VER=1400";
     command+=" -D _WIN32";
-
     if(config.ansi_c.mode!=configt::ansi_ct::MODE_VISUAL_STUDIO_C_CPP)
       command+=" -D _M_IX86=Blend";
 
@@ -733,7 +692,7 @@ bool c_preprocess_gcc(
       command+=" -D _WIN64"; // yes, both _WIN32 and _WIN64 get defined
 
     if(config.ansi_c.char_is_unsigned)
-      command+=" -D _CHAR_UNSIGNED"; // This is Visual Studio
+      command+=" -D _CHAR_UNSIGNED";
     break;
 
   case configt::ansi_ct::NO_OS:

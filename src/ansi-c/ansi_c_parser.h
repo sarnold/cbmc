@@ -67,6 +67,8 @@ public:
   std::string string_literal;
   mp_integer pragma_pack;
   
+  enum { LANGUAGE, EXPRESSION } grammar;
+
   enum { ANSI, GCC, MSC, ICC, CW, ARM } mode;
   // ANSI is strict ANSI-C
   // GCC is, well, gcc
@@ -142,11 +144,19 @@ public:
     return scopes.back();
   }
 
+  static void convert_declarator(
+    irept &declarator,
+    const typet &type,
+    irept &identifier);
+    
   typedef enum { TAG, MEMBER, PARAMETER, OTHER } decl_typet;
 
-  // convert a declarator and then add it to existing an declaration
-  void add_declarator(exprt &declaration, irept &declarator);
-
+  void new_declaration(
+    const irept &type,
+    irept &declarator,
+    exprt &declaration,
+    decl_typet decl_type);
+   
   void copy_item(const ansi_c_declarationt &declaration)
   {
     assert(declaration.id()==ID_declaration);
@@ -163,7 +173,7 @@ public:
   ansi_c_id_classt lookup(
     std::string &name,
     bool tag,
-    bool label);
+    bool label) const;
 
   static ansi_c_id_classt get_class(const typet &type);
   

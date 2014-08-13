@@ -89,7 +89,6 @@ public:
   bool simplify_isnan(exprt &expr);
   bool simplify_isnormal(exprt &expr);
   bool simplify_abs(exprt &expr);
-  bool simplify_sign(exprt &expr);
 
   // auxiliary
   bool simplify_if_implies(exprt &expr, const exprt &cond, bool truth, bool &new_truth);

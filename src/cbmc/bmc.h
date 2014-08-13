@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <list>
 #include <map>
+#include <exception>
 
 #include <util/hash_cont.h>
 #include <util/options.h>
@@ -25,6 +26,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/symex_target_equation.h>
 
 #include "symex_bmc.h"
+#include "bv_cbmc.h"
+
 
 class bmct:public messaget
 {
@@ -32,12 +35,13 @@ public:
   bmct(
     const optionst &_options,
     const symbol_tablet &_symbol_table,
-    message_handlert &_message_handler):
+    message_handlert &_message_handler,
+    prop_convt& _prop_conv):
     messaget(_message_handler),
     options(_options),
     ns(_symbol_table, new_symbol_table),
     equation(ns),
-    symex(ns, new_symbol_table, equation),
+    symex(ns, new_symbol_table, equation,_prop_conv),
     ui(ui_message_handlert::PLAIN)
   {
     symex.constant_propagation=options.get_bool_option("propagation");
@@ -53,7 +57,10 @@ public:
   friend class hw_cbmc_satt;
   friend class counterexample_beautification_greedyt;
   
-  void set_ui(language_uit::uit _ui) { ui=_ui; }
+  void set_ui(language_uit::uit _ui) { 
+    ui=_ui; 
+    symex.set_ui(ui);
+  }
   
 protected:
   const optionst &options;  
@@ -68,20 +75,9 @@ protected:
   virtual decision_proceduret::resultt
     run_decision_procedure(prop_convt &prop_conv);
     
-  virtual bool decide(prop_convt &prop_conv);
+  virtual bool decide(prop_convt &prop_conv, bool show_report=true);
     
-  // the solvers we have
-  virtual bool decide_default();
-  virtual bool decide_bv_refinement();
-  virtual bool decide_aig();
-  virtual bool decide_smt1();
-  virtual bool decide_smt2();
-  smt1_dect::solvert get_smt1_solver_type() const;
-  smt2_dect::solvert get_smt2_solver_type() const;
-  virtual void smt1_convert(smt1_dect::solvert solver, std::ostream &out);
-  virtual void smt2_convert(smt2_dect::solvert solver, std::ostream &out);
-  virtual bool write_dimacs();
-  virtual bool write_dimacs(std::ostream &out);
+  virtual bool write_dimacs(prop_convt &prop_conv);
   
   // unwinding
   virtual void setup_unwind();
@@ -93,9 +89,6 @@ protected:
   prop_convt *solver_factory();
 
   virtual void show_vcc();
-  virtual bool all_claims(
-    const goto_functionst &goto_functions,
-    prop_convt &solver);
   virtual void show_vcc(std::ostream &out);
   virtual void show_program();
   virtual void report_success();
@@ -108,6 +101,32 @@ protected:
   void cover_assertions(
     const goto_functionst &goto_functions,
     prop_convt &solver);
+
+  // all claims
+  struct goalt
+  {
+    exprt::operandst conjuncts;
+    std::string description;
+    bool covered; //goal reachable?
+
+    explicit goalt(const goto_programt::instructiont &instruction)
+    {
+      description=id2string(instruction.location.get_comment());
+      covered = false;
+    }
+  
+    goalt()
+    {
+    }
+  };
+
+  // Collect _all_ goals in `goal_map'.
+  // This maps claim IDs to 'goalt'
+  typedef std::map<irep_idt, goalt> goal_mapt;
+  goal_mapt goal_map;
+ 
+  virtual bool all_claims(const goto_functionst &goto_functions, prop_convt &solver);
+
 };
 
 #endif

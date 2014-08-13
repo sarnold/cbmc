@@ -10,7 +10,6 @@ Author: CM Wintersteiger
 #include <fstream>
 
 #include <util/i2string.h>
-#include <util/string2int.h>
 
 #include <cuddObj.hh> // CUDD Library
 
@@ -300,7 +299,7 @@ bool qbf_skizzo_coret::get_certificate(void)
 
     size_t ob=line.find('[');
     std::string n_es=line.substr(ob+1, line.find(']')-ob-1);
-    n_e=unsafe_string2int(n_es);
+    n_e=atoi(n_es.c_str());
     assert(n_e!=0);
 
     e_list.resize(n_e);
@@ -310,7 +309,7 @@ bool qbf_skizzo_coret::get_certificate(void)
     {
       size_t space=e_lists.find(' ');
 
-      int cur=unsafe_string2int(e_lists.substr(0, space));
+      int cur=atoi(e_lists.substr(0, space).c_str());
       assert(cur!=0);
 
       e_list[i]=cur;
@@ -359,9 +358,9 @@ bool qbf_skizzo_coret::get_certificate(void)
       DdNode *negNode = bdds[2*i+1];
 
       if(Cudd_DagSize(posNode) <= Cudd_DagSize(negNode))
-        model_bdds[cur]=new BDD(*bdd_manager, posNode);
+        model_bdds[cur]=new BDD(bdd_manager, posNode);
       else
-        model_bdds[cur]=new BDD(*bdd_manager, Cudd_Not(negNode));
+        model_bdds[cur]=new BDD(bdd_manager, Cudd_Not(negNode));
     }
 
     // tell CUDD that we don't need those BDDs anymore.

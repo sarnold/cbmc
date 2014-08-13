@@ -92,16 +92,7 @@ int run(
     else /* fork() returns new pid to the parent process */
     {
       int status;     /* parent process: child's exit status */
-
-      while(waitpid(childpid, &status, 0)==-1) /* wait for child to exit, and store its status */
-        if(errno==EINTR)
-          continue; // try again
-        else
-        {
-          perror("Waiting for child process failed");
-          return 1;
-        }
-
+      wait(&status); /* wait for child to exit, and store its status */
       return WEXITSTATUS(status);
     }
   }

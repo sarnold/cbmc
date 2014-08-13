@@ -18,70 +18,27 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "unicode.h"
 #include "cout_message.h"
 
-/*******************************************************************\
-
-Function: cout_message_handlert::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cout_message_handlert::print(
   unsigned level,
   const std::string &message)
 {
-  if(verbosity>=level)
-  {
-    std::cout << message << '\n';
+  std::cout << message << '\n';
 
-    // We flush for level 6 or below.
-    if(level<=6) std::cout << std::flush;
-  }
+  // We flush for level 6 or below.
+  if(level<=6) std::cout << std::flush;
 }
  
-/*******************************************************************\
-
-Function: cerr_message_handlert::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cerr_message_handlert::print(
   unsigned level,
   const std::string &message)
 {
-  if(verbosity>=level)
-    std::cerr << message << '\n' << std::flush;
+  std::cerr << message << '\n' << std::flush;
 }
-
-/*******************************************************************\
-
-Function: consolte_message_handlert::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void console_message_handlert::print(
   unsigned level,
   const std::string &message)
 { 
-  if(verbosity<level)
-    return;
-
   #ifdef _WIN32
   HANDLE out_handle=
     GetStdHandle((level>1)?STD_OUTPUT_HANDLE:STD_ERROR_HANDLE);

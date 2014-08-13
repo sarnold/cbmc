@@ -23,6 +23,7 @@ class optionst;
 #define CBMC_OPTIONS \
   "(program-only)(function):(preprocess)(slice-by-trace):" \
   "(no-simplify)(unwind):(unwindset):(slice-formula)" \
+  "(unwind-max):(unwind-min):" \
   "(debug-level):(no-propagation)(no-simplify-if)" \
   "(document-subgoals)(outfile):" \
   "D:I:" \
@@ -31,7 +32,7 @@ class optionst;
   "(signed-overflow-check)(unsigned-overflow-check)(float-overflow-check)(nan-check)" \
   "(no-assertions)(no-assumptions)" \
   "(xml-ui)(xml-interface)(vcd):" \
-  "(smt1)(smt2)(fpa)(cvc3)(cvc4)(boolector)(yices)(z3)(opensmt)(mathsat)" \
+  "(cvc)(smt1)(smt2)(boolector)(yices)(z3)(opensmt)(mathsat)(fpa)" \
   "(no-sat-preprocessor)" \
   "(no-pretty-names)(beautify)" \
   "(floatbv)(fixedbv)" \
@@ -44,6 +45,8 @@ class optionst;
   "(all-claims)(all-properties)" \
   "(error-label):(verbosity):(no-library)" \
   "(version)" \
+  "(incremental-check):(incremental)" \
+  "(ignore-assertions-before-unwind-min)(stop-when-unsat)" \
   "(cover-assertions)" \
   "(mm):" \
   "(i386-linux)(i386-macos)(i386-win32)(win32)(winx64)(gcc)" \

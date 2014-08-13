@@ -19,10 +19,6 @@ Author: Daniel Kroening, kroening@kroening.com
 class message_handlert
 {
 public:
-  inline message_handlert():verbosity(10)
-  {
-  }
-
   virtual void print(unsigned level, const std::string &message) = 0;
 
   virtual void print(
@@ -34,12 +30,6 @@ public:
   virtual ~message_handlert()
   {
   }
-
-  inline void set_verbosity(unsigned _verbosity) { verbosity=_verbosity; }
-  inline unsigned get_verbosity() const { return verbosity; }
-  
-protected:
-  unsigned verbosity;
 };
  
 class null_message_handlert:public message_handlert
@@ -94,12 +84,16 @@ public:
 
   virtual void set_message_handler(message_handlert &_message_handler);
 
-  inline message_clientt():message_handler(NULL)
+  virtual void set_verbosity(unsigned _verbosity);
+  virtual unsigned get_verbosity() const;
+  
+  inline message_clientt():
+    verbosity(M_DEBUG), message_handler(NULL)
   {
   }
    
   inline explicit message_clientt(message_handlert &_message_handler):
-    message_handler(&_message_handler)
+    verbosity(M_DEBUG), message_handler(&_message_handler)
   {
   }
    
@@ -109,6 +103,7 @@ public:
   }
 
 protected:
+  unsigned verbosity;
   message_handlert *message_handler;
 };
 
@@ -118,19 +113,19 @@ public:
   // constructors, destructor
   
   inline messaget():
-    mstream(M_DEBUG, &message_handler)
+    mstream(M_DEBUG, verbosity, &message_handler)
   {
   }
   
   inline messaget(const messaget &other):
     message_clientt(other),
-    mstream(M_DEBUG, &message_handler)
+    mstream(M_DEBUG, verbosity, &message_handler)
   {
   }
    
   inline explicit messaget(message_handlert &_message_handler):
     message_clientt(_message_handler),
-    mstream(M_DEBUG, &message_handler)
+    mstream(M_DEBUG, verbosity, &message_handler)
   {
   }
    
@@ -192,13 +187,14 @@ public:
   public:
     inline mstreamt(
       unsigned _message_level,
+      unsigned _verbosity,
       message_handlert **_message_handler):
       message_level(_message_level),
       message_handler(_message_handler)
     {
     }
 
-    unsigned message_level;
+    unsigned message_level, verbosity;
     message_handlert **message_handler;
 
     template <class T>
@@ -219,7 +215,7 @@ public:
   // the printing of the message
   static inline mstreamt &eom(mstreamt &m)
   {
-    if((*m.message_handler)!=NULL)
+    if((*m.message_handler)!=NULL && m.verbosity>=m.message_level)
       (*m.message_handler)->print(m.message_level, m.str());
     m.clear(); // clears error bits
     m.str(std::string()); // clears the string
@@ -236,42 +232,49 @@ public:
   inline mstreamt &error()
   {
     mstream.message_level=M_ERROR;
+    mstream.verbosity=verbosity;
     return mstream;
   }
   
   inline mstreamt &warning()
   {
     mstream.message_level=M_WARNING;
+    mstream.verbosity=verbosity;
     return mstream;
   }
   
   inline mstreamt &result()
   {
     mstream.message_level=M_RESULT;
+    mstream.verbosity=verbosity;
     return mstream;
   }
   
   inline mstreamt &status()
   {
     mstream.message_level=M_STATUS;
+    mstream.verbosity=verbosity;
     return mstream;
   }
   
   inline mstreamt &statistics()
   {
     mstream.message_level=M_STATISTICS;
+    mstream.verbosity=verbosity;
     return mstream;
   }
   
   inline mstreamt &debug()
   {
     mstream.message_level=M_DEBUG;
+    mstream.verbosity=verbosity;
     return mstream;
   }
   
   inline mstreamt &get_mstream(unsigned message_level)
   {
     mstream.message_level=message_level;
+    mstream.verbosity=verbosity;
     return mstream;
   }
   

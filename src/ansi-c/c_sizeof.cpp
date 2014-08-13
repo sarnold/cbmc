@@ -36,24 +36,16 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   if(type.id()==ID_signedbv ||
      type.id()==ID_unsignedbv ||
      type.id()==ID_floatbv ||
-     type.id()==ID_fixedbv)
+     type.id()==ID_fixedbv ||
+     type.id()==ID_c_enum ||
+     type.id()==ID_incomplete_c_enum)
   {
     // We round up to bytes.
     // See special treatment for bit-fields below.
-    unsigned bits=to_bitvector_type(type).get_width();
+    unsigned bits=type.get_int(ID_width);
     unsigned bytes=bits/8;
     if((bits%8)!=0) bytes++;
     dest=from_integer(bytes, size_type());
-  }
-  else if(type.id()==ID_incomplete_c_enum)
-  {
-    // refuse to give a size
-    return nil_exprt();
-  }
-  else if(type.id()==ID_c_enum)
-  {
-    // check the subtype
-    dest=sizeof_rec(type.subtype());
   }
   else if(type.id()==ID_pointer)
   {
@@ -138,7 +130,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
           
         // We just sum them up.
         // This assumes they are properly padded.
-        bit_field_width+=it->get_bit_field_bits();
+        bit_field_width+=sub_type.get_int(ID_width);
       }
       else
       {
@@ -310,7 +302,7 @@ exprt c_sizeoft::c_offsetof(
         
       // We just sum them up.
       // This assumes they are properly padded.
-      bit_field_width+=it->get_bit_field_bits();
+      bit_field_width+=sub_type.get_int(ID_width);
     }
     else
     {

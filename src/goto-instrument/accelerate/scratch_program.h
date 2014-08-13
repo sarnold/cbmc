@@ -55,7 +55,7 @@ class scratch_programt : public goto_programt {
     return check_sat(true);
   }
 
-  exprt eval(const exprt &e);
+  exprt eval(exprt &e);
 
   void fix_types();
 

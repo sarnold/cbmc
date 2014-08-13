@@ -45,35 +45,24 @@ int make_identifier()
 {
   loc();
 
-  // this hashes the identifier
-  irep_idt base_name=yytext;
-  
-  if(PARSER.cpp)
-  {
-    stack(yyansi_clval).id(ID_symbol);
-    stack(yyansi_clval).set(ID_C_base_name, base_name);
-    return TOK_IDENTIFIER;
-  }
+  std::string base_name(yytext);
+  std::string identifier(base_name);
+
+  // figure out if this is a typedef or something else
+  ansi_c_id_classt result=
+    PARSER.lookup(identifier, PARSER.tag_following, false);
+
+  PARSER.tag_following=false;
+
+  stack(yyansi_clval).id(ID_symbol);
+  stack(yyansi_clval).set(ID_C_base_name, base_name);
+  stack(yyansi_clval).set(ID_identifier, identifier);
+  stack(yyansi_clval).set(ID_C_id_class, result);
+
+  if(result==ANSI_C_TYPEDEF)
+    return TOK_TYPEDEFNAME;
   else
-  {
-    std::string identifier(id2string(base_name));
-
-    // figure out if this is a typedef or something else
-    ansi_c_id_classt result=
-      PARSER.lookup(identifier, PARSER.tag_following, false);
-
-    PARSER.tag_following=false;
-
-    stack(yyansi_clval).id(ID_symbol);
-    stack(yyansi_clval).set(ID_C_base_name, base_name);
-    stack(yyansi_clval).set(ID_identifier, identifier);
-    stack(yyansi_clval).set(ID_C_id_class, result);
-
-    if(result==ANSI_C_TYPEDEF)
-      return TOK_TYPEDEFNAME;
-    else
-      return TOK_IDENTIFIER;
-  }
+    return TOK_IDENTIFIER;
 }
 
 int MSC_Keyword(int token)
@@ -131,6 +120,7 @@ delimiter       [ \t\b\r]
 newline         [\n\f\v]|"\\\n"
 whitespace      {delimiter}+
 ws              {delimiter}*
+ws_or_newline   ({delimiter}|{newline})*
 ucletter	[A-Z]
 lcletter	[a-z]
 letter		({ucletter}|{lcletter})
@@ -183,7 +173,7 @@ string_lit      ("L"|"u"|"U"|"u8")?["]{s_char}*["]
 %x STRING_LITERAL_COMMENT
 %x ASM_BLOCK
 %x MSC_ASM
-%x IGNORE_PARENS
+%x MSC_DECLSPEC
 %x MSC_PRAGMA
 %x MSC_ANNOTATION
 %x GCC_ATTRIBUTE1
@@ -206,6 +196,13 @@ void ansi_c_scanner_init()
 
 <INITIAL>.|\n   { BEGIN(GRAMMAR);
 		  yyless(0);		/* start again with this character */
+		  //yy_current_buffer->yy_at_bol = 1; /* at beginning of line */
+		  switch(PARSER.grammar)
+		   {
+                   case ansi_c_parsert::EXPRESSION: return TOK_PARSE_EXPRESSION;
+                   case ansi_c_parsert::LANGUAGE: return TOK_PARSE_LANGUAGE;
+		   default: assert(0);
+		   }
 		 }
 
 <GRAMMAR>"/*"   { BEGIN(COMMENT1); } /* begin C comment state */
@@ -509,26 +506,13 @@ void ansi_c_scanner_init()
                     BEGIN(MSC_ASM);
                     return TOK_MSC_ASM;
                   }
-                  else if(PARSER.cpp)
-                  {
-                    loc();
-                    return TOK_GCC_ASM;
-                  }
                   else
                     BEGIN(GCC_ASM);
                 }
 
 "asm"           { if(PARSER.mode==ansi_c_parsert::GCC ||
                      PARSER.mode==ansi_c_parsert::CW)
-                  {
-                    if(PARSER.cpp)
-                    {
-                      loc();
-                      return TOK_GCC_ASM;
-                    }
-                    else
-                      BEGIN(GCC_ASM);
-                  }
+                    BEGIN(GCC_ASM);
                   else
                     return make_identifier();
                 }
@@ -536,15 +520,7 @@ void ansi_c_scanner_init()
 "__asm__"       { if(PARSER.mode==ansi_c_parsert::GCC ||
                      PARSER.mode==ansi_c_parsert::CW ||
                      PARSER.mode==ansi_c_parsert::ARM)
-                  {
-                    if(PARSER.cpp)
-                    {
-                      loc();
-                      return TOK_GCC_ASM;
-                    }
-                    else
-                      BEGIN(GCC_ASM);
-                  }
+                    BEGIN(GCC_ASM);
                   else
                     return make_identifier();
                 }
@@ -554,18 +530,6 @@ void ansi_c_scanner_init()
                   else
                     return make_identifier();
                 }
-
-"__unaligned"   { if(PARSER.mode==ansi_c_parsert::MSC)
-                    { /* ignore for now */ }
-                  else
-                    return make_identifier();
-                }
-
-"__wchar_t"     { if(PARSER.mode==ansi_c_parsert::MSC)  
-                    { loc(); return TOK_WCHAR_T; }  
-                  else
-                    return make_identifier();
-                }                                                                          
 
 %{
 /* C++ Keywords and Operators */
@@ -680,21 +644,19 @@ __decltype          { if(PARSER.cpp && PARSER.mode==ansi_c_parsert::GCC)
                  }
 
 "__declspec" |
-"_declspec"     { if(PARSER.cpp)
+"_declspec"     { if(PARSER.mode==ansi_c_parsert::MSC ||
+                     PARSER.mode==ansi_c_parsert::CW ||
+                     PARSER.mode==ansi_c_parsert::ARM)
                   {
-                    BEGIN(IGNORE_PARENS);
-                  }
-                  else if(PARSER.mode==ansi_c_parsert::MSC ||
-                          PARSER.mode==ansi_c_parsert::CW ||
-                          PARSER.mode==ansi_c_parsert::ARM)
-                  {
-                    loc(); return TOK_MSC_DECLSPEC;
+                    BEGIN(MSC_DECLSPEC);
+                    PARSER.parenthesis_counter=0;
                   }
                   else if(PARSER.mode==ansi_c_parsert::GCC)
                   {
                     // GCC supports this on Windows as an exception!
                     // Should likely reject on other targets.
-                    loc(); return TOK_MSC_DECLSPEC;
+                    BEGIN(MSC_DECLSPEC);
+                    PARSER.parenthesis_counter=0;
                   }
                   else
                     return make_identifier();
@@ -713,12 +675,7 @@ __decltype          { if(PARSER.cpp && PARSER.mode==ansi_c_parsert::GCC)
 "__attribute"   { if(PARSER.mode==ansi_c_parsert::GCC ||
                      PARSER.mode==ansi_c_parsert::CW ||
                      PARSER.mode==ansi_c_parsert::ARM)
-                  {
-                    if(PARSER.cpp)
-                      BEGIN(IGNORE_PARENS);
-                    else
-                      BEGIN(GCC_ATTRIBUTE1);
-                  }
+                    BEGIN(GCC_ATTRIBUTE1);
                   else
                     return make_identifier();
                 }
@@ -761,7 +718,7 @@ __decltype          { if(PARSER.cpp && PARSER.mode==ansi_c_parsert::GCC)
 "__align"       { /* an ARM extension */
                   if(PARSER.mode==ansi_c_parsert::ARM)
                   {
-                    BEGIN(IGNORE_PARENS);
+                    BEGIN(MSC_DECLSPEC);
                     PARSER.parenthesis_counter=0;
                   }
                   else
@@ -771,7 +728,7 @@ __decltype          { if(PARSER.cpp && PARSER.mode==ansi_c_parsert::GCC)
 "__smc"         { /* an ARM extension */
                   if(PARSER.mode==ansi_c_parsert::ARM)
                   {
-                    BEGIN(IGNORE_PARENS);
+                    BEGIN(MSC_DECLSPEC);
                     PARSER.parenthesis_counter=0;
                   }
                   else
@@ -835,7 +792,7 @@ __decltype          { if(PARSER.cpp && PARSER.mode==ansi_c_parsert::GCC)
 "__global_reg"  { /* an ARM extension */
                   if(PARSER.mode==ansi_c_parsert::ARM)
                   {
-                    BEGIN(IGNORE_PARENS);
+                    BEGIN(MSC_DECLSPEC);
                     PARSER.parenthesis_counter=0;
                   }
                   else
@@ -845,7 +802,7 @@ __decltype          { if(PARSER.cpp && PARSER.mode==ansi_c_parsert::GCC)
 "__svc"         { /* an ARM extension */
                   if(PARSER.mode==ansi_c_parsert::ARM)
                   {
-                    BEGIN(IGNORE_PARENS);
+                    BEGIN(MSC_DECLSPEC);
                     PARSER.parenthesis_counter=0;
                   }
                   else
@@ -855,7 +812,7 @@ __decltype          { if(PARSER.cpp && PARSER.mode==ansi_c_parsert::GCC)
 "__svc_indirect" { /* an ARM extension */
                   if(PARSER.mode==ansi_c_parsert::ARM)
                   {
-                    BEGIN(IGNORE_PARENS);
+                    BEGIN(MSC_DECLSPEC);
                     PARSER.parenthesis_counter=0;
                   }
                   else
@@ -865,7 +822,7 @@ __decltype          { if(PARSER.cpp && PARSER.mode==ansi_c_parsert::GCC)
 "__svc_indirect_r7" { /* an ARM extension */
                   if(PARSER.mode==ansi_c_parsert::ARM)
                   {
-                    BEGIN(IGNORE_PARENS);
+                    BEGIN(MSC_DECLSPEC);
                     PARSER.parenthesis_counter=0;
                   }
                   else
@@ -925,30 +882,35 @@ __decltype          { if(PARSER.cpp && PARSER.mode==ansi_c_parsert::GCC)
                 }
 
 "__try"         { if(PARSER.mode==ansi_c_parsert::MSC)
-                    { loc(); return TOK_MSC_TRY; }
+                    { loc(); return TOK_TRY; }
                   else
                     return make_identifier();
                 }
 
 "try"           { if(PARSER.cpp) // C++?
                     { loc(); return TOK_TRY; }
+                  else if(PARSER.mode==ansi_c_parsert::MSC)
+                    { loc(); return TOK_TRY; }                    
                   else
                     return make_identifier();
                 }
 
-"__finally"     { if(PARSER.mode==ansi_c_parsert::MSC)
+"__finally" |
+"finally"       { if(PARSER.mode==ansi_c_parsert::MSC)
                     { loc(); return TOK_MSC_FINALLY; }
                   else
                     return make_identifier();
                 }
 
-"__except"      { if(PARSER.mode==ansi_c_parsert::MSC)
+"__except" |
+"except"        { if(PARSER.mode==ansi_c_parsert::MSC)
                     { loc(); return TOK_MSC_EXCEPT; }
                   else
                     return make_identifier();
                 }
 
-"__leave"       { if(PARSER.mode==ansi_c_parsert::MSC)
+"__leave" |
+"leave"         { if(PARSER.mode==ansi_c_parsert::MSC)
                     { loc(); return TOK_MSC_LEAVE; }
                   else
                     return make_identifier();
@@ -1182,11 +1144,11 @@ __decltype          { if(PARSER.cpp && PARSER.mode==ansi_c_parsert::GCC)
 <ASM_BLOCK>"}"  { PARSER.asm_block_following=false;
                   BEGIN(GRAMMAR); loc(); return '}'; }
 
-<IGNORE_PARENS>")"    { PARSER.parenthesis_counter--;
+<MSC_DECLSPEC>")"    { PARSER.parenthesis_counter--;
                         if(PARSER.parenthesis_counter==0)
                           BEGIN(GRAMMAR); }
-<IGNORE_PARENS>"("    { PARSER.parenthesis_counter++; }
-<IGNORE_PARENS>.      { /* Throw away */ }
+<MSC_DECLSPEC>"("    { PARSER.parenthesis_counter++; }
+<MSC_DECLSPEC>.      { /* Throw away */ }
 
 <MSC_PRAGMA>")"    { PARSER.parenthesis_counter--;
                         if(PARSER.parenthesis_counter==0)

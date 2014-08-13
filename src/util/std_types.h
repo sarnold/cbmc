@@ -234,8 +234,6 @@ public:
     {
       set(ID_C_bit_field_type, _type);
     }
-    
-    unsigned get_bit_field_bits() const;
   };
 
   typedef std::vector<componentt> componentst;
@@ -547,16 +545,16 @@ public:
   {
   }
   
-  // used to be argumentt -- now uses standard terminology
+  // will rename arguments -> parameters to use standard terminology
 
   class parametert:public exprt
   {
   public:
-    inline parametert():exprt(ID_parameter)
+    inline parametert():exprt(ID_argument)
     {
     }
     
-    explicit inline parametert(const typet &type):exprt(ID_parameter, type)
+    explicit inline parametert(const typet &type):exprt(ID_argument, type)
     {
     }
     
@@ -599,9 +597,11 @@ public:
     }
   };
   
+  typedef parametert argumentt;
+  
   inline bool has_ellipsis() const
   {
-    return find(ID_parameters).get_bool(ID_ellipsis);
+    return find(ID_arguments).get_bool(ID_ellipsis);
   }
 
   inline bool is_KnR() const
@@ -611,9 +611,10 @@ public:
 
   inline void make_ellipsis()
   {
-    add(ID_parameters).set(ID_ellipsis, true);
+    add(ID_arguments).set(ID_ellipsis, true);
   }
 
+  typedef std::vector<parametert> argumentst;
   typedef std::vector<parametert> parameterst;
 
   inline const typet &return_type() const
@@ -626,14 +627,24 @@ public:
     return add_type(ID_return_type);
   }
   
+  inline const parameterst &arguments() const
+  {
+    return (const parameterst &)find(ID_arguments).get_sub();
+  }
+
+  inline parameterst &arguments()
+  {
+    return (parameterst &)add(ID_arguments).get_sub();
+  }
+  
   inline const parameterst &parameters() const
   {
-    return (const parameterst &)find(ID_parameters).get_sub();
+    return (const parameterst &)find(ID_arguments).get_sub();
   }
 
   inline parameterst &parameters()
   {
-    return (parameterst &)add(ID_parameters).get_sub();
+    return (parameterst &)add(ID_arguments).get_sub();
   }
   
   inline bool get_inlined() const
@@ -1196,7 +1207,7 @@ public:
   {
   }
   
-  explicit inline complex_typet(const typet &_subtype):typet(ID_complex, _subtype)
+  inline complex_typet(const typet &_subtype):typet(ID_complex, _subtype)
   {
   }
 };

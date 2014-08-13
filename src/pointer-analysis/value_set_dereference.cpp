@@ -6,13 +6,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-//#define DEBUG
-
-#ifdef DEBUG
-#include <iostream>
-#include <langapi/language_util.h>
-#endif
-
 #include <cassert>
 
 #include <util/string2int.h>

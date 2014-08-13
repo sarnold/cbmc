@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <iostream>
+
 #include "cpp_typecheck.h"
 #include "cpp_scope.h"
 

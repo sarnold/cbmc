@@ -27,6 +27,7 @@ class cover_goalst:public messaget
 {
 public:
   explicit inline cover_goalst(prop_convt &_prop_conv):
+  activation_literal(const_literal(false)),
     prop_conv(_prop_conv)
   {
   }
@@ -49,6 +50,7 @@ public:
 
   typedef std::list<cover_goalt> goalst;
   goalst goals;
+  literalt activation_literal; //for incremental solving
   
   // statistics
 

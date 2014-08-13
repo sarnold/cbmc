@@ -31,7 +31,6 @@ void __CPROVER_atomic_begin();
 void __CPROVER_atomic_end();
 void __CPROVER_fence(const char *kind, ...);
 #if 0
-__CPROVER_thread_local unsigned long __CPROVER_thread_id=0;
 __CPROVER_bool __CPROVER_threads_exited[__CPROVER_constant_infinity_uint];
 unsigned long __CPROVER_next_thread_id=0;
 
@@ -100,7 +99,6 @@ unsigned step, unsigned loop_free);
 void __CPROVER_predicate(__CPROVER_bool predicate);
 void __CPROVER_parameter_predicates();
 void __CPROVER_return_predicates();
-#endif
 
 // pipes, write, read, close
 struct __CPROVER_pipet {
@@ -109,7 +107,6 @@ struct __CPROVER_pipet {
   short next_avail;
   short next_unread;
 };
-#if 0
 extern struct __CPROVER_pipet __CPROVER_pipes[__CPROVER_constant_infinity_uint];
 // offset to make sure we don't collide with other fds
 extern const int __CPROVER_pipe_offset;

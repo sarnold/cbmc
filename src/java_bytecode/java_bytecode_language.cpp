@@ -70,7 +70,8 @@ Function: java_bytecode_languaget::preprocess
 bool java_bytecode_languaget::preprocess(
   std::istream &instream,
   const std::string &path,
-  std::ostream &outstream)
+  std::ostream &outstream,
+  message_handlert &message_handler)
 {
   // there is no preprocessing!
   return true;
@@ -90,11 +91,12 @@ Function: java_bytecode_languaget::parse
 
 bool java_bytecode_languaget::parse(
   std::istream &instream,
-  const std::string &path)
+  const std::string &path,
+  message_handlert &message_handler)
 {
   // store the path
   parse_path=path;
-  return javap_parse(path, parse_tree, get_message_handler());
+  return javap_parse(path, parse_tree, message_handler);
 }
              
 /*******************************************************************\
@@ -111,16 +113,17 @@ Function: java_bytecode_languaget::typecheck
 
 bool java_bytecode_languaget::typecheck(
   symbol_tablet &symbol_table,
-  const std::string &module)
+  const std::string &module,
+  message_handlert &message_handler)
 {
   symbol_tablet new_symbol_table;
 
   if(java_bytecode_convert(
-       parse_tree, new_symbol_table, module, get_message_handler()))
+       parse_tree, new_symbol_table, module, message_handler))
     return true;
   
   if(java_bytecode_typecheck(
-       new_symbol_table, module, get_message_handler()))
+       new_symbol_table, module, message_handler))
     return true;
 
   symbol_table.swap(new_symbol_table);
@@ -143,14 +146,16 @@ Function: java_bytecode_languaget::final
 
 \*******************************************************************/
 
-bool java_bytecode_languaget::final(symbol_tablet &symbol_table)
+bool java_bytecode_languaget::final(
+  symbol_tablet &symbol_table,
+  message_handlert &message_handler)
 {
   /*
   if(c_final(symbol_table, message_handler)) return true;
   */
   java_internal_additions(symbol_table);
 
-  if(java_entry_point(symbol_table, get_message_handler())) return true;
+  if(java_entry_point(symbol_table, message_handler)) return true;
   
   return false;
 }
@@ -247,6 +252,7 @@ bool java_bytecode_languaget::to_expr(
   const std::string &code,
   const std::string &module,
   exprt &expr,
+  message_handlert &message_handler,
   const namespacet &ns)
 {
   #if 0

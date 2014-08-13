@@ -17,7 +17,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/language.h>
 #include <util/unicode.h>
 #include <util/memory_info.h>
-#include <util/i2string.h>
 
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/remove_function_pointers.h>
@@ -37,6 +36,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <langapi/mode.h>
 
+#include <solvers/prop/prop_conv.h>
+#include <solvers/sat/satcheck.h>
+#include <solvers/sat/satcheck_minisat2.h>
+
+#include "cbmc_solvers.h"
 #include "cbmc_parseoptions.h"
 #include "bmc.h"
 #include "version.h"
@@ -109,7 +113,7 @@ void cbmc_parseoptionst::eval_verbosity()
       v=10;
   }
   
-  ui_message_handler.set_verbosity(v);
+  set_verbosity(v);
 }
 
 /*******************************************************************\
@@ -155,8 +159,17 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("all-claims", false);
 
-  if(cmdline.isset("unwind"))
+  if(cmdline.isset("unwind-max"))
+    options.set_option("unwind-max", cmdline.getval("unwind-max"));
+  if(cmdline.isset("unwind-min"))
+    options.set_option("unwind-min", cmdline.getval("unwind-min"));
+  if(cmdline.isset("unwind")) 
     options.set_option("unwind", cmdline.getval("unwind"));
+
+  if(cmdline.isset("ignore-assertions-before-unwind-min"))
+    options.set_option("ignore-assertions-before-unwind-min", true);
+  if(cmdline.isset("stop-when-unsat"))
+    options.set_option("stop-when-unsat", true);
 
   if(cmdline.isset("depth"))
     options.set_option("depth", cmdline.getval("depth"));
@@ -169,6 +182,11 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("unwindset"))
     options.set_option("unwindset", cmdline.getval("unwindset"));
+
+  if(cmdline.isset("incremental"))
+    options.set_option("incremental", true);
+  if(cmdline.isset("incremental-check"))
+    options.set_option("incremental-check", cmdline.getval("incremental-check"));
 
   // constant propagation
   if(cmdline.isset("no-propagation"))
@@ -280,103 +298,29 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("aig"))
     options.set_option("aig", true);
 
-  // SMT Options
-  bool version_set = false;
+  if(cmdline.isset("boolector"))
+    options.set_option("boolector", true);
+
+  if(cmdline.isset("mathsat"))
+    options.set_option("mathsat", true);
+
+  if(cmdline.isset("cvc"))
+    options.set_option("cvc", true);
 
   if(cmdline.isset("smt1"))
-  {
     options.set_option("smt1", true);
-    options.set_option("smt2", false);
-    version_set = true;
-  }
 
   if(cmdline.isset("smt2"))
-  {
-    options.set_option("smt1", false);// If both are given, smt2 takes precedence
     options.set_option("smt2", true);
-    version_set = true;
-  }
 
   if(cmdline.isset("fpa"))
     options.set_option("fpa", true);
 
-
-  bool solver_set = false;
-
-  if(cmdline.isset("boolector"))
-  {
-    options.set_option("boolector", true), solver_set = true;
-    if (!version_set)
-      options.set_option("smt1", true), version_set = true;
-  }
-
-  if(cmdline.isset("mathsat"))
-  {
-    options.set_option("mathsat", true), solver_set = true;
-    if (!version_set)
-      options.set_option("smt2", true), version_set = true;
-  }
-
-  if(cmdline.isset("cvc3"))
-  {
-    options.set_option("cvc3", true), solver_set = true;
-    if (!version_set)
-      options.set_option("smt1", true), version_set = true;
-  }
-
-  if(cmdline.isset("cvc4"))
-  {
-    options.set_option("cvc4", true), solver_set = true;
-    if (!version_set)
-      options.set_option("smt2", true), version_set = true;
-  }
-
   if(cmdline.isset("yices"))
-  {
-    options.set_option("yices", true), solver_set = true;
-    if (!version_set)
-      options.set_option("smt2", true), version_set = true;
-  }
+    options.set_option("yices", true);
 
   if(cmdline.isset("z3"))
-  {
-    options.set_option("z3", true), solver_set = true;
-    if (!version_set)
-      options.set_option("smt2", true), version_set = true;
-  }
-
-  if(cmdline.isset("opensmt"))
-  {
-    options.set_option("opensmt", true), solver_set = true;
-    if (!version_set)
-      options.set_option("smt1", true), version_set = true;
-  }
-
-
-  if (version_set && !solver_set)
-  {
-    if (cmdline.isset("outfile"))
-    {
-      // outfile and no solver should give standard compliant SMT-LIB
-      options.set_option("generic", true), solver_set = true;
-    }
-    else
-    {
-      if (options.get_bool_option("smt1"))
-      {
-	options.set_option("boolector", true), solver_set = true;
-      }
-      else
-      {
-	assert(options.get_bool_option("smt2"));
-	options.set_option("mathsat", true), solver_set = true;
-      }
-    }
-  }
-  // Either have solver and standard version set, or neither.
-  assert(version_set == solver_set);
-
-
+    options.set_option("z3", true);
 
   if(cmdline.isset("beautify"))
     options.set_option("beautify", true);
@@ -414,22 +358,12 @@ int cbmc_parseoptionst::doit()
   }
   
   //
-  // command line options
-  //
-
-  optionst options;
-  get_command_line_options(options);
-  eval_verbosity();
-
-  //
   // Print a banner
   //
-  status("CBMC version " CBMC_VERSION " "+
-         i2string(sizeof(void *)*8)+"-bit "+
-         id2string(config.this_operating_system()));
+  status("CBMC version " CBMC_VERSION);
 
   //
-  // Unwinding of transition systems is done by hw-cbmc.
+  // unwinding of transition systems
   //
 
   if(cmdline.isset("module") ||
@@ -440,9 +374,32 @@ int cbmc_parseoptionst::doit()
                " hardware modules. Please use hw-cbmc." << eom;
     return 1;
   }
+
+  if(cmdline.isset("incremental") && cmdline.isset("unwind")) 
+  {
+    error() << "--unwind cannot be used with --incremental" << eom;
+    return 1;
+  }
   
   register_languages();
 
+  //
+  // command line options
+  //
+
+  optionst options;
+  get_command_line_options(options);
+
+  //get solver
+  cbmc_solverst cbmc_solvers(options, symbol_table, ui_message_handler);
+  cbmc_solvers.set_ui(get_ui());
+  std::auto_ptr<cbmc_solverst::solvert> cbmc_solver = cbmc_solvers.get_solver();
+  prop_convt& prop_conv = cbmc_solver->prop_conv();
+
+  bmct bmc(options, symbol_table, ui_message_handler,prop_conv);
+  eval_verbosity();
+  bmc.set_verbosity(get_verbosity());
+  
   if(cmdline.isset("preprocess"))
   {
     preprocessing();
@@ -450,7 +407,6 @@ int cbmc_parseoptionst::doit()
   }
 
   goto_functionst goto_functions;
-  bmct bmc(options, symbol_table, ui_message_handler);
 
   if(get_goto_program(options, bmc, goto_functions))
     return 6;
@@ -529,7 +485,7 @@ Function: cbmc_parseoptionst::get_goto_program
   
 bool cbmc_parseoptionst::get_goto_program(
   const optionst &options,
-  bmct &bmc, // for get_modules
+  bmct &bmc,
   goto_functionst &goto_functions)
 {
   if(cmdline.args.size()==0)
@@ -588,18 +544,16 @@ bool cbmc_parseoptionst::get_goto_program(
       }
                               
       languaget *language=get_language_from_filename(filename);
-      
+                                                
       if(language==NULL)
       {
         error() << "failed to figure out type of file `" <<  filename << "'" << eom;
         return true;
       }
-      
-      language->set_message_handler(get_message_handler());
                                                                 
       status("Parsing", filename);
   
-      if(language->parse(infile, filename))
+      if(language->parse(infile, filename, get_message_handler()))
       {
         error() << "PARSING ERROR" << eom;
         return true;
@@ -711,12 +665,11 @@ void cbmc_parseoptionst::preprocessing()
       error() << "failed to figure out type of file" << eom;
       return;
     }
-    
-    ptr->set_message_handler(get_message_handler());
 
     std::auto_ptr<languaget> language(ptr);
   
-    if(language->preprocess(infile, filename, std::cout))
+    if(language->preprocess(
+      infile, filename, std::cout, get_message_handler()))
       error() << "PREPROCESSING ERROR" << eom;
   }
 
@@ -939,7 +892,7 @@ void cbmc_parseoptionst::help()
     " --memory-leak-check          enable memory leak checks\n"
     " --signed-overflow-check      enable arithmetic over- and underflow checks\n"
     " --unsigned-overflow-check    enable arithmetic over- and underflow checks\n"
-    " --float-overflow-check       check floating-point for +/-Inf\n"
+    " --float-overflow-check       check floating-point for NaN\n"
     " --nan-check                  check floating-point for NaN\n"
     " --all-properties             report status of all properties\n"
     " --show-properties            show the properties\n"
@@ -958,6 +911,12 @@ void cbmc_parseoptionst::help()
     " --unwind nr                  unwind nr times\n"
     " --unwindset L:B,...          unwind loop L with a bound of B\n"
     "                              (use --show-loops to get the loop IDs)\n"
+    " --incremental                check after each unwinding\n"
+    " --incremental-check L        check after each unwinding of loop L\n"
+    " --unwind-min nr              start incremental check after nr unwindings\n"
+    " --unwind-max nr              stop incremental check after nr unwindings\n"
+    " --ignore-assertions-before-unwind-min\n"
+    " --stop-when-unsat            for step case in k-induction checks\n"
     " --show-vcc                   show the verification conditions\n"
     " --slice-formula              remove assignments unrelated to property\n"
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
@@ -971,11 +930,9 @@ void cbmc_parseoptionst::help()
     " --smt2                       output subgoals in SMT2 syntax (experimental)\n"
     " --boolector                  use Boolector (experimental)\n"
     " --mathsat                    use MathSAT (experimental)\n"
-    " --cvc3                       use CVC3 (experimental)\n"
-    " --cvc4                       use CVC4 (experimental)\n"
+    " --cvc                        use CVC3 (experimental)\n"
     " --yices                      use Yices (experimental)\n"
     " --z3                         use Z3 (experimental)\n"
-    " --opensmt                    use OpenSMT (experimental)\n"
     " --refine                     use refinement procedure (experimental)\n"
     " --outfile filename           output formula to given file\n"
     " --arrays-uf-never            never turn arrays into uninterpreted functions\n"

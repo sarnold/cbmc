@@ -19,6 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <linking/entry_point.h>
 
 #include "ansi_c_language.h"
+#include "ansi_c_convert.h"
 #include "ansi_c_typecheck.h"
 #include "ansi_c_parser.h"
 #include "expr2c.h"
@@ -78,13 +79,14 @@ Function: ansi_c_languaget::preprocess
 bool ansi_c_languaget::preprocess(
   std::istream &instream,
   const std::string &path,
-  std::ostream &outstream)
+  std::ostream &outstream,
+  message_handlert &message_handler)
 {
   // stdin?
   if(path=="")
-    return c_preprocess(instream, outstream, get_message_handler());
+    return c_preprocess(instream, outstream, message_handler);
 
-  return c_preprocess(path, outstream, get_message_handler());
+  return c_preprocess(path, outstream, message_handler);  
 }
              
 /*******************************************************************\
@@ -101,7 +103,8 @@ Function: ansi_c_languaget::parse
 
 bool ansi_c_languaget::parse(
   std::istream &instream,
-  const std::string &path)
+  const std::string &path,
+  message_handlert &message_handler)
 {
   // store the path
 
@@ -111,7 +114,7 @@ bool ansi_c_languaget::parse(
 
   std::ostringstream o_preprocessed;
 
-  if(preprocess(instream, path, o_preprocessed))
+  if(preprocess(instream, path, o_preprocessed, message_handler))
     return true;
 
   std::istringstream i_preprocessed(o_preprocessed.str());
@@ -125,7 +128,8 @@ bool ansi_c_languaget::parse(
   ansi_c_parser.clear();
   ansi_c_parser.set_file(ID_built_in);
   ansi_c_parser.in=&codestr;
-  ansi_c_parser.set_message_handler(get_message_handler());
+  ansi_c_parser.set_message_handler(message_handler);
+  ansi_c_parser.grammar=ansi_c_parsert::LANGUAGE;
   ansi_c_parser.for_has_scope=config.ansi_c.for_has_scope;
 
   switch(config.ansi_c.mode)
@@ -191,16 +195,20 @@ Function: ansi_c_languaget::typecheck
 
 bool ansi_c_languaget::typecheck(
   symbol_tablet &symbol_table,
-  const std::string &module)
+  const std::string &module,
+  message_handlert &message_handler)
 {
+  if(ansi_c_convert(parse_tree, module, message_handler))
+    return true;
+
   symbol_tablet new_symbol_table;
 
-  if(ansi_c_typecheck(parse_tree, new_symbol_table, module, get_message_handler()))
+  if(ansi_c_typecheck(parse_tree, new_symbol_table, module, message_handler))
     return true;
 
   remove_internal_symbols(new_symbol_table);
   
-  if(linking(symbol_table, new_symbol_table, get_message_handler()))
+  if(linking(symbol_table, new_symbol_table, message_handler))
     return true;
     
   return false;
@@ -218,10 +226,11 @@ Function: ansi_c_languaget::final
 
 \*******************************************************************/
 
-bool ansi_c_languaget::final(symbol_tablet &symbol_table)
+bool ansi_c_languaget::final(
+  symbol_tablet &symbol_table,
+  message_handlert &message_handler)
 {
-  if(entry_point(symbol_table, "c::main", get_message_handler()))
-    return true;
+  if(entry_point(symbol_table, "c::main", message_handler)) return true;
   
   return false;
 }
@@ -318,21 +327,22 @@ bool ansi_c_languaget::to_expr(
   const std::string &code,
   const std::string &module,
   exprt &expr,
+  message_handlert &message_handler,
   const namespacet &ns)
 {
   expr.make_nil();
 
   // no preprocessing yet...
 
-  std::istringstream i_preprocessed(
-    "void __my_expression = (void) (\n"+code+"\n);");
+  std::istringstream i_preprocessed(code);
   
   // parsing
 
   ansi_c_parser.clear();
   ansi_c_parser.set_file(irep_idt());
   ansi_c_parser.in=&i_preprocessed;
-  ansi_c_parser.set_message_handler(get_message_handler());
+  ansi_c_parser.set_message_handler(message_handler);
+  ansi_c_parser.grammar=ansi_c_parsert::EXPRESSION;
   ansi_c_parser.mode=ansi_c_parsert::GCC;
   ansi_c_scanner_init();
 
@@ -342,10 +352,13 @@ bool ansi_c_languaget::to_expr(
     result=true;
   else
   {
-    expr=ansi_c_parser.parse_tree.items.front().declarator().value();
+    expr=ansi_c_parser.parse_tree.items.front().value();
     
+    result=ansi_c_convert(expr, "", message_handler);
+
     // typecheck it
-    result=ansi_c_typecheck(expr, get_message_handler(), ns);
+    if(!result)
+      result=ansi_c_typecheck(expr, message_handler, ns);
   }
 
   // save some memory

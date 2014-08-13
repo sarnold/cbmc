@@ -48,11 +48,11 @@ public:
 
   std::set<exprt> get(
     const goto_programt::const_targett t,
-    const exprt &src) const;
+    const exprt &src);
 
   bool aliases(
     const goto_programt::const_targett t,
-    const exprt &src1, const exprt &src2) const;
+    const exprt &src1, const exprt &src2);
     
 protected:
   void build(const goto_functiont &goto_function);
@@ -60,8 +60,8 @@ protected:
   typedef std::stack<unsigned> work_queuet;
 
   // the following may eventually get merged  
-  mutable numbering<irep_idt> pointers;
-  mutable numbering<exprt> objects;
+  numbering<irep_idt> pointers;
+  numbering<exprt> objects;
   
   // The following struct describes what a pointer
   // may point to
@@ -106,9 +106,9 @@ protected:
   void get_rec(
     destt &dest,
     const exprt &rhs,
-    const loc_infot &loc_info_src) const;
+    const loc_infot &loc_info_src);
     
-  bool is_tracked(const irep_idt &identifier) const;
+  bool is_tracked(const irep_idt &identifier);
   
   unsigned unknown_object;
   std::set<exprt> empty_set;

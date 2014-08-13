@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_IREP_H
 
 #include <vector>
+#include <map>
 #include <string>
 #include <cassert>
 #include <iosfwd>
@@ -17,14 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define USE_DSTRING
 #define SHARING
 //#define HASH_CODE
-//#define USE_MOVE
-//#define SUB_IS_LIST
-
-#ifdef SUB_IS_LIST
-#include <list>
-#else
-#include <map>
-#endif
 
 #ifdef USE_DSTRING
 #include "dstring.h"
@@ -86,18 +79,8 @@ extern inline const std::string &name2string(const irep_namet &n)
 class irept
 {
 public:
-  // These are not stable.
   typedef std::vector<irept> subt;
-
-  // named_subt has to provide stable references; with C++11 we could
-  // use std::forward_list or std::vector< unique_ptr<T> > to save
-  // memory and increase efficiency.
-  
-  #ifdef SUB_IS_LIST
-  typedef std::list<std::pair<irep_namet, irept> > named_subt;
-  #else
   typedef std::map<irep_namet, irept> named_subt;
-  #endif
 
   inline bool is_nil() const { return id()==ID_nil; }
   inline bool is_not_nil() const { return id()!=ID_nil; }
@@ -130,7 +113,7 @@ public:
   // Copy from rvalue reference.
   // Note that this does avoid a branch compared to the
   // standard copy constructor above.
-  inline irept(irept &&irep):data(irep.data)
+  inline irept(const irept &&irep):data(irep.data)
   {
     #ifdef IREP_DEBUG
     std::cout << "COPY MOVE\n";
@@ -159,7 +142,7 @@ public:
   #ifdef USE_MOVE
   // Note that the move assignment operator does avoid
   // three branches compared to standard operator above.
-  inline irept &operator=(irept &&irep)
+  inline irept &operator=(const irept &&irep)
   {
     #ifdef IREP_DEBUG
     std::cout << "ASSIGN MOVE\n";
@@ -245,8 +228,8 @@ public:
   inline named_subt &get_comments() { return write().comments; } // DANGEROUS
   inline const named_subt &get_comments() const { return read().comments; }
   
-  std::size_t hash() const;
-  std::size_t full_hash() const;
+  size_t hash() const;
+  size_t full_hash() const;
   
   friend bool full_eq(const irept &a, const irept &b);
   
@@ -277,7 +260,7 @@ public:
     subt sub;
 
     #ifdef HASH_CODE
-    mutable std::size_t hash_code;
+    mutable size_t hash_code;
     #endif
 
     void clear()
@@ -370,12 +353,12 @@ public:
 
 struct irep_hash
 {
-  inline std::size_t operator()(const irept &irep) const { return irep.hash(); }
+  inline size_t operator()(const irept &irep) const { return irep.hash(); }
 };
 
 struct irep_full_hash
 {
-  inline std::size_t operator()(const irept &irep) const { return irep.full_hash(); }
+  inline size_t operator()(const irept &irep) const { return irep.full_hash(); }
 };
 
 struct irep_full_eq

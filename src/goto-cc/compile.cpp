@@ -16,6 +16,7 @@ Date: June 2006
 
 #include <util/config.h>
 #include <util/tempdir.h>
+#include <util/replace_symbol.h>
 #include <util/base_type.h>
 #include <util/i2string.h>
 #include <util/cmdline.h>
@@ -524,8 +525,6 @@ bool compilet::parse(const std::string &file_name)
   }
 
   languaget &language=*languagep;
-  language.set_message_handler(get_message_handler());
-  
   language_filet language_file;
 
   std::pair<language_filest::filemapt::iterator, bool>
@@ -556,13 +555,13 @@ bool compilet::parse(const std::string &file_name)
       }
     }
 
-    language.preprocess(infile, file_name, *os);
+    language.preprocess(infile, file_name, *os, get_message_handler());
   }
   else
   {
     print(8, "Parsing: "+file_name);
 
-    if(language.parse(infile, file_name))
+    if(language.parse(infile, file_name, get_message_handler()))
     {
       if(get_ui()==ui_message_handlert::PLAIN)
         error() << "PARSING ERROR" << eom;
@@ -589,8 +588,6 @@ Function: compilet::parse_stdin
 bool compilet::parse_stdin()
 {
   ansi_c_languaget language;
-  
-  language.set_message_handler(get_message_handler());
 
   print(8, "Parsing: (stdin)");
 
@@ -612,11 +609,11 @@ bool compilet::parse_stdin()
       }
     }
 
-    language.preprocess(std::cin, "", *os);
+    language.preprocess(std::cin, "", *os, get_message_handler());
   }
   else
   {
-    if(language.parse(std::cin, ""))
+    if(language.parse(std::cin, "", get_message_handler()))
     {
       if(get_ui()==ui_message_handlert::PLAIN)
         error() << "PARSING ERROR" << eom;
@@ -767,12 +764,14 @@ bool compilet::read_object(
 
   linkingt linking(symbol_table, temp_symbol_table, ui_message_handler);
   
+  linking.set_verbosity(verbosity);
+
   if(linking.typecheck_main())
     return true;
     
   if(link_functions(symbol_table, functions,
                     temp_symbol_table, temp_functions,
-                    linking.rename_symbol))
+                    linking.replace_symbol))
     return true;
 
   return false;
@@ -865,19 +864,21 @@ bool compilet::link_functions(
   goto_functionst &dest_functions,
   symbol_tablet &src_symbol_table,
   goto_functionst &src_functions,
-  const rename_symbolt &rename_symbol)
+  const replace_symbolt &replace_symbol)
 {
   // merge functions
   Forall_goto_functions(src_it, src_functions)
   {
     // the function might have been renamed    
-    rename_symbolt::expr_mapt::const_iterator e_it=
-      rename_symbol.expr_map.find(src_it->first);
-
+    replace_symbolt::expr_mapt::const_iterator e_it=
+      replace_symbol.expr_map.find(src_it->first);
     irep_idt final_id=src_it->first;
-
-    if(e_it!=rename_symbol.expr_map.end())
-      final_id=e_it->second;
+    if(e_it!=replace_symbol.expr_map.end())
+    {
+      const exprt &rep_exp=e_it->second;
+      if(rep_exp.id()==ID_symbol)
+        final_id=rep_exp.get(ID_identifier);
+    }
   
     // already there?
     goto_functionst::function_mapt::iterator dest_f_it=
@@ -885,7 +886,7 @@ bool compilet::link_functions(
 
     if(dest_f_it==dest_functions.function_map.end()) // not there yet
     {
-      rename_symbols_in_function(src_it->second, rename_symbol);
+      replace_symbols_in_function(src_it->second, replace_symbol);
 
       goto_functionst::goto_functiont &in_dest_symbol_table=
         dest_functions.function_map[final_id];
@@ -904,7 +905,7 @@ bool compilet::link_functions(
       if(in_dest_symbol_table.body.instructions.empty())
       {
         // the one with body wins!
-        rename_symbols_in_function(src_func, rename_symbol);
+        replace_symbols_in_function(src_func, replace_symbol);
         
         in_dest_symbol_table.body.swap(src_func.body);
         in_dest_symbol_table.body_available=src_func.body_available;
@@ -921,7 +922,7 @@ bool compilet::link_functions(
       else
       {
         // the linking code will have ensured that types match
-        rename_symbol(src_func.type);
+        replace_symbol.replace(src_func.type);
         assert(base_type_eq(in_dest_symbol_table.type, src_func.type, ns));
       }
     }
@@ -932,7 +933,7 @@ bool compilet::link_functions(
 
 /*******************************************************************\
 
-Function: compilet::rename_symbols_in_function
+Function: compilet::replace_symbols_in_function
 
   Inputs:
 
@@ -942,17 +943,17 @@ Function: compilet::rename_symbols_in_function
 
 \*******************************************************************/
 
-void compilet::rename_symbols_in_function(
+void compilet::replace_symbols_in_function(
   goto_functionst::goto_functiont &function,
-  const rename_symbolt &rename_symbol) const
+  const replace_symbolt &replace_symbol) const
 {
   goto_programt &program=function.body;
-  rename_symbol(function.type);
+  replace_symbol.replace(function.type);
 
   Forall_goto_program_instructions(iit, program)
   {
-    rename_symbol(iit->code);
-    rename_symbol(iit->guard);
+    replace_symbol.replace(iit->code);
+    replace_symbol.replace(iit->guard);
   }
 }
 

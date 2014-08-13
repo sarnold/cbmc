@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <iostream>
+
 #include <util/threeval.h>
 
 #include "literal_expr.h"
@@ -15,11 +17,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 Function: cover_goalst::~cover_goalst
 
-  Inputs:
+  Inputs: -
 
- Outputs:
+ Outputs: -
 
- Purpose:
+ Purpose: constructor
 
 \*******************************************************************/
 
@@ -31,9 +33,9 @@ cover_goalst::~cover_goalst()
 
 Function: cover_goalst::mark
 
-  Inputs:
+  Inputs: -
 
- Outputs:
+ Outputs: -
 
  Purpose: Mark goals that are covered
 
@@ -57,11 +59,13 @@ void cover_goalst::mark()
 
 Function: cover_goalst::constaint
 
-  Inputs:
+  Inputs: -
 
- Outputs:
+ Outputs: -
 
- Purpose: Build clause
+ Purpose: Build clause (activation literal, non-covered assertion 1 ... 
+                                            non-covered assertion n)
+          and add it to the solver's database
 
 \*******************************************************************/
 
@@ -69,12 +73,21 @@ void cover_goalst::constraint()
 {
   exprt::operandst disjuncts;
 
+  disjuncts.push_back(literal_exprt(activation_literal));
+   
   for(std::list<cover_goalt>::const_iterator
       g_it=goals.begin();
       g_it!=goals.end();
       g_it++)
     if(!g_it->covered && !g_it->condition.is_false())
       disjuncts.push_back(literal_exprt(g_it->condition));
+
+#if 0
+  std::cout << "cover_goals.assertion_clause = ";
+  forall_literals(it, bv) 
+    std::cout << *it << ", ";
+  std::cout << std::endl;
+#endif
 
   // this is 'false' if there are no disjuncts
   prop_conv.set_to_true(disjunction(disjuncts));

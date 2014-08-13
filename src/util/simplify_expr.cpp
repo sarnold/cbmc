@@ -152,7 +152,6 @@ void simplify_exprt::setup_jump_table()
   ENTRY(ID_isnan, simplify_isnan);
   ENTRY(ID_isnormal, simplify_isnormal);
   ENTRY(ID_abs, simplify_abs);
-  ENTRY(ID_sign, simplify_sign);
 }
 
 /*******************************************************************\
@@ -289,47 +288,6 @@ bool simplify_exprt::simplify_abs(exprt &expr)
 
 /*******************************************************************\
 
-Function: simplify_exprt::simplify_sign
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool simplify_exprt::simplify_sign(exprt &expr)
-{
-  if(expr.operands().size()!=1) return true;
- 
-  if(expr.op0().is_constant())
-  {
-    const typet &type=ns.follow(expr.op0().type());
-    
-    if(type.id()==ID_floatbv)
-    {
-      ieee_floatt value(to_constant_expr(expr.op0()));
-      expr.make_bool(value.get_sign());
-      return false;
-    }
-    else if(type.id()==ID_signedbv ||
-            type.id()==ID_unsignedbv)
-    {
-      mp_integer value;
-      if(!to_integer(expr.op0(), value))
-      {
-        expr.make_bool(value>=0);
-        return false;
-      }
-    }
-  }
-  
-  return true; 
-}
-
-/*******************************************************************\
-
 Function: simplify_exprt::simplify_typecast
 
   Inputs:
@@ -454,45 +412,38 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
   //
   // Doesn't work for many, e.g., pointer difference, floating-point,
   // division, modulo.
-  // Many operations fail if the width of T
-  // is bigger than that of (x OP y). This includes ID_bitnot and
-  // anything that might overflow, e.g., ID_plus.
+  // Also excludes ID_bitnot, which fails if the width of T
+  // is bigger than that of (x OP y).
   //
   if((expr_type.id()==ID_signedbv || expr_type.id()==ID_unsignedbv) &&
      (op_type.id()==ID_signedbv || op_type.id()==ID_unsignedbv))
   {
-    bool enlarge=
-      to_bitvector_type(expr_type).get_width() > to_bitvector_type(op_type).get_width();
+    irep_idt op_id=expr.op0().id();
 
-    if(!enlarge)
+    if(op_id==ID_plus || op_id==ID_minus || op_id==ID_mult ||
+       op_id==ID_unary_minus || 
+       op_id==ID_bitxor || op_id==ID_bitor || op_id==ID_bitand)
     {
-      irep_idt op_id=expr.op0().id();
-    
-      if(op_id==ID_plus || op_id==ID_minus || op_id==ID_mult ||
-         op_id==ID_unary_minus || 
-         op_id==ID_bitxor || op_id==ID_bitor || op_id==ID_bitand)
+      exprt result=expr.op0();
+      
+      if(result.operands().size()>=1 && 
+         base_type_eq(result.op0().type(), result.type(), ns))
       {
-        exprt result=expr.op0();
-        
-        if(result.operands().size()>=1 && 
-           base_type_eq(result.op0().type(), result.type(), ns))
+        result.type()=expr.type();
+
+        Forall_operands(it, result)
         {
-          result.type()=expr.type();
-
-          Forall_operands(it, result)
-          {
-            it->make_typecast(expr.type());
-            simplify_typecast(*it); // recursive call
-          }
-
-          simplify_node(result); // possibly recursive call
-          expr.swap(result);
-          return false;
+          it->make_typecast(expr.type());
+          simplify_typecast(*it); // recursive call
         }
+
+        simplify_node(result); // possibly recursive call
+        expr.swap(result);
+        return false;
       }
-      else if(op_id==ID_ashr || op_id==ID_lshr || op_id==ID_shl)
-      {
-      }
+    }
+    else if(op_id==ID_ashr || op_id==ID_lshr || op_id==ID_shl)
+    {
     }
   }
 
@@ -1663,31 +1614,37 @@ bool simplify_exprt::simplify_minus(exprt &expr)
     return true;
   
   if(is_number(expr.type()) &&
-     is_number(operands[0].type()) &&
-     is_number(operands[1].type()))
+     is_number(operands.front().type()) &&
+     is_number(operands.back().type()))
   {
-    // rewrite "a-b" to "a+(-b)"
-    unary_minus_exprt tmp2(operands[1]);
-    simplify_unary_minus(tmp2);
+    exprt tmp2(ID_unary_minus, expr.type());
+    tmp2.move_to_operands(operands.back());
+    simplify_node(tmp2);
 
-    plus_exprt tmp(operands[0], tmp2);
-    simplify_plus(tmp);
+    exprt tmp(ID_plus, expr.type());
+    tmp.move_to_operands(operands.front());
+    tmp.move_to_operands(tmp2);
 
     expr.swap(tmp);
+    simplify_node(expr);
+
     return false;
   }
   else if(expr.type().id()==ID_pointer &&
-          operands[0].type().id()==ID_pointer &&
-          is_number(operands[1].type()))
+          is_number(operands.back().type()))
   {
-    // pointer arithmetic: rewrite "p-i" to "p+(-i)"
-    unary_minus_exprt tmp2(operands[1]);
-    simplify_unary_minus(tmp2);
+    // pointer arithmetic
+    exprt tmp2(ID_unary_minus, operands.back().type());
+    tmp2.move_to_operands(operands.back());
+    simplify_node(tmp2);
 
-    plus_exprt tmp(operands[0], tmp2);
-    simplify_plus(tmp);
+    exprt tmp(ID_plus, expr.type());
+    tmp.move_to_operands(operands.front());
+    tmp.move_to_operands(tmp2);
 
     expr.swap(tmp);
+    simplify_node(expr);
+
     return false;
   }
 
@@ -3113,15 +3070,9 @@ bool simplify_exprt::simplify_inequality_address_of(exprt &expr)
   exprt tmp0=expr.op0();
   if(tmp0.id()==ID_typecast)
     tmp0=expr.op0().op0();
-  if(tmp0.op0().id()==ID_index &&
-     to_index_expr(tmp0.op0()).index().is_zero())
-    tmp0=address_of_exprt(to_index_expr(tmp0.op0()).array());
   exprt tmp1=expr.op1();
   if(tmp1.id()==ID_typecast)
     tmp1=expr.op1().op0();
-  if(tmp1.op0().id()==ID_index &&
-     to_index_expr(tmp1.op0()).index().is_zero())
-    tmp1=address_of_exprt(to_index_expr(tmp1.op0()).array());
   assert(tmp0.id()==ID_address_of);
   assert(tmp1.id()==ID_address_of);
 
@@ -3385,14 +3336,10 @@ bool simplify_exprt::eliminate_common_addends(
   }
   else if(op0==op1)
   {
-    if(!op0.is_zero() &&
-       op0.type().id()!=ID_complex)
-    {
-      // elimination!
-      op0=gen_zero(op0.type());
-      op1=gen_zero(op1.type());
-      return false;
-    }
+    // elimination!
+    op0=gen_zero(op0.type());
+    op1=gen_zero(op1.type());
+    return false;
   }
   
   return true;
@@ -3516,19 +3463,17 @@ bool simplify_exprt::simplify_inequality_not_constant(exprt &expr)
     }
   }
   
-  // See if we can eliminate common addends on both sides.
-  // On bit-vectors, this is only sound on '='.
+  // see if we can eliminate common addends on both sides
+  // on bit-vectors, this is only sound on '='
   if(expr.id()==ID_equal)
-  {
     if(!eliminate_common_addends(expr.op0(), expr.op1()))
     {
       // remove zeros
       simplify_node(expr.op0());
       simplify_node(expr.op1());
-      simplify_inequality(expr); // recursive call
+      simplify_inequality(expr);
       return false;
     }
-  }
   
   return true;
 }  
@@ -3859,11 +3804,11 @@ bool simplify_exprt::simplify_with(exprt &expr)
         const irep_idt &component_name=
           expr.op1().get(ID_component_name);
 
-        if(!to_struct_type(op0_type).
+        if(!to_struct_type(expr.op0().type()).
            has_component(component_name))
           return result;
 
-        unsigned number=to_struct_type(op0_type).
+        unsigned number=to_struct_type(expr.op0().type()).
            component_number(component_name);
 
         expr.op0().operands()[number].swap(expr.op2());
@@ -5031,30 +4976,19 @@ bool simplify_exprt::simplify_byte_update(exprt &expr)
       const typet& tp = ns.follow(with.type());
       if(tp.id()==ID_struct) 
       {
-        const struct_typet &struct_type=to_struct_type(tp);
-        const irep_idt &component_name=with.op1().get(ID_component_name);
-        
-        // is this a bit field?
-        if(struct_type.get_component(component_name).get_is_bit_field())
+        // new offset = offset + component offset
+        mp_integer i = member_offset(ns, to_struct_type(tp), 
+                                     with.op1().get(ID_component_name));
+        if(i != -1) 
         {
-          // don't touch -- might not be byte-aligned
-        }
-        else
-        {
-          // new offset = offset + component offset
-          mp_integer i = member_offset(ns, struct_type, 
-                                       component_name);
-          if(i != -1) 
-          {
-            exprt compo_offset = from_integer(i, offset.type());
-            plus_exprt new_offset (offset, compo_offset);
-            simplify_node (new_offset);
-            exprt new_value(with.op2());
-            expr.op1().swap(new_offset);
-            expr.op2().swap(new_value);
-            simplify_byte_update(expr); // do this recursively
-            return false;
-          }
+          exprt compo_offset = from_integer(i, offset.type());
+          plus_exprt new_offset (offset, compo_offset);
+          simplify_node (new_offset);
+          exprt new_value(with.op2());
+          expr.op1().swap(new_offset);
+          expr.op2().swap(new_value);
+          simplify_byte_update(expr); // do this recursively
+          return false;
         }
       }
       else if(tp.id()==ID_array)
@@ -5324,7 +5258,6 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
 
   if(operand.id()==ID_unary_minus)
   {
-    // cancel out "-(-x)" to "x"
     if(operand.operands().size()!=1)
       return true;
 
@@ -5506,8 +5439,6 @@ bool simplify_exprt::simplify_node(exprt &expr)
     result=simplify_isnormal(expr) && result;
   else if(expr.id()==ID_abs)
     result=simplify_abs(expr) && result;
-  else if(expr.id()==ID_sign)
-    result=simplify_sign(expr) && result;
   #else
   
   unsigned no=expr.id().get_no();

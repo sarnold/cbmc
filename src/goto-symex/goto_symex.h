@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 */
 
 #include <util/options.h>
-#include <util/byte_operators.h>
 
 #include <goto-programs/goto_functions.h>
 
@@ -49,6 +48,7 @@ public:
     remaining_claims(0),
     constant_propagation(true),
     new_symbol_table(_new_symbol_table),
+    ignore_assertions(false),
     ns(_ns),
     target(_target),
     atomic_section_counter(0),
@@ -74,13 +74,13 @@ public:
     const goto_programt &goto_program);
 
   /** start symex in a given state */
-  virtual void operator()(
+  virtual bool operator()(
     statet &state,
     const goto_functionst &goto_functions,
     const goto_programt &goto_program);	   
 
   /** execute just one step */
-  virtual void symex_step(
+  virtual bool symex_step(
     const goto_functionst &goto_functions,
     statet &state);
 
@@ -95,6 +95,7 @@ public:
 
   optionst options;
   symbol_tablet &new_symbol_table;
+  bool ignore_assertions;
 
 protected:
   const namespacet &ns;
@@ -103,6 +104,8 @@ protected:
 
   friend class symex_dereference_statet;
   
+  virtual bool check_break(statet& state, const exprt &cond, unsigned unwind);
+
   void new_name(symbolt &symbol);
   
   // this does the following:
@@ -148,7 +151,7 @@ protected:
   
   // symex
 
-  virtual void symex_goto(statet &state);
+  virtual bool symex_goto(statet &state);
   virtual void symex_start_thread(statet &state);
   virtual void symex_atomic_begin(statet &state);
   virtual void symex_atomic_end(statet &state);  
@@ -194,19 +197,19 @@ protected:
   {
   }
 
-  virtual void symex_function_call(
+  virtual bool symex_function_call(
     const goto_functionst &goto_functions,
     statet &state,
     const code_function_callt &call);
 
   virtual void symex_end_of_function(statet &state);
 
-  virtual void symex_function_call_symbol(
+  virtual bool symex_function_call_symbol(
     const goto_functionst &goto_functions,
     statet &state,
     const code_function_callt &call);
 
-  virtual void symex_function_call_code(
+  virtual bool symex_function_call_code(
     const goto_functionst &goto_functions,
     statet &state,
     const code_function_callt &call);
@@ -247,9 +250,9 @@ protected:
   void symex_assign_symbol(statet &state, const symbol_exprt &lhs, const exprt &full_lhs, const exprt &rhs, guardt &guard, visibilityt visibility);
   void symex_assign_typecast(statet &state, const typecast_exprt &lhs, const exprt &full_lhs, const exprt &rhs, guardt &guard, visibilityt visibility);
   void symex_assign_array(statet &state, const index_exprt &lhs, const exprt &full_lhs, const exprt &rhs, guardt &guard, visibilityt visibility);
-  void symex_assign_struct_member(statet &state, const member_exprt &lhs, const exprt &full_lhs, const exprt &rhs, guardt &guard, visibilityt visibility);
+  void symex_assign_member(statet &state, const member_exprt &lhs, const exprt &full_lhs, const exprt &rhs, guardt &guard, visibilityt visibility);
   void symex_assign_if(statet &state, const if_exprt &lhs, const exprt &full_lhs, const exprt &rhs, guardt &guard, visibilityt visibility);
-  void symex_assign_byte_extract(statet &state, const byte_extract_exprt &lhs, const exprt &full_lhs, const exprt &rhs, guardt &guard, visibilityt visibility);
+  void symex_assign_byte_extract(statet &state, const exprt &lhs, const exprt &full_lhs, const exprt &rhs, guardt &guard, visibilityt visibility);
   
   static exprt add_to_lhs(const exprt &lhs, const exprt &what);
   

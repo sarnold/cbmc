@@ -105,7 +105,7 @@ Function: local_may_aliast::is_tracked
 
 \*******************************************************************/
 
-bool local_may_aliast::is_tracked(const irep_idt &identifier) const
+bool local_may_aliast::is_tracked(const irep_idt &identifier)
 {
   localst::locals_mapt::const_iterator it=locals.locals_map.find(identifier);
   if(it==locals.locals_map.end()) return false;
@@ -180,7 +180,7 @@ Function: local_may_aliast::get
 
 std::set<exprt> local_may_aliast::get(
   const goto_programt::const_targett t,
-  const exprt &rhs) const
+  const exprt &rhs)
 {
   local_cfgt::loc_mapt::const_iterator loc_it=cfg.loc_map.find(t);
   
@@ -218,7 +218,7 @@ Function: local_may_aliast::aliases
 
 bool local_may_aliast::aliases(
   const goto_programt::const_targett t,
-  const exprt &src1, const exprt &src2) const
+  const exprt &src1, const exprt &src2)
 {
   local_cfgt::loc_mapt::const_iterator loc_it=cfg.loc_map.find(t);
   
@@ -259,7 +259,7 @@ Function: local_may_aliast::get_rec
 void local_may_aliast::get_rec(
   destt &dest,
   const exprt &rhs,
-  const loc_infot &loc_info_src) const
+  const loc_infot &loc_info_src)
 {
   if(rhs.id()==ID_constant)
   {
@@ -356,7 +356,7 @@ void local_may_aliast::get_rec(
   {
     dest.objects.insert(unknown_object);
   }
-  else if(rhs.id()==ID_side_effect)
+  else if(rhs.id()==ID_sideeffect)
   {
     const side_effect_exprt &side_effect_expr=to_side_effect_expr(rhs);
     const irep_idt &statement=side_effect_expr.get_statement();

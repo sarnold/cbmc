@@ -103,20 +103,20 @@ void cpp_typecheckt::typecheck_type(typet &type)
 
       typecheck_type(class_object);
 
-      // there may be parameters if this is a pointer to member function
+      // there may be arguments if this is a pointer to member function
       if(type.subtype().id()==ID_code)
       {
-        irept::subt &parameters=type.subtype().add(ID_parameters).get_sub();
+        irept::subt &args=type.subtype().add(ID_arguments).get_sub();
 
-        if(parameters.empty() ||
-           parameters.front().get(ID_C_base_name)!=ID_this)
+        if(args.empty() ||
+           args.front().get(ID_C_base_name)!=ID_this)
         {
-          // Add 'this' to the parameters
-          exprt a0(ID_parameter);
+          // Add 'this' to the arguments
+          exprt a0(ID_argument);
           a0.set(ID_C_base_name, ID_this);
           a0.type().id(ID_pointer);
           a0.type().subtype() = class_object;
-          parameters.insert(parameters.begin(), a0);
+          args.insert(args.begin(),a0);
         }
       }
     }

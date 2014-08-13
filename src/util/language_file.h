@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ostream>
 #include <set>
-#include <map>
 #include <string>
 
 #include "message.h"

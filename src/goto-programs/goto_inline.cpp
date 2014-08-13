@@ -300,7 +300,7 @@ void goto_inlinet::expand_function_call(
           "but got `"+function.id_string()+"'";
   }
   
-  const irep_idt identifier=function.get(ID_identifier);
+  const irep_idt &identifier=function.get(ID_identifier);
   
   // see if we are already expanding it
   if(recursion_set.find(identifier)!=recursion_set.end())
@@ -353,7 +353,8 @@ void goto_inlinet::expand_function_call(
 
   if(f.body_available)
   {
-    recursion_set.insert(identifier);
+    recursion_sett::iterator recursion_it=
+      recursion_set.insert(identifier).first;  
 
     // first make sure that this one is already inlined
     goto_inline_rec(m_it, full);
@@ -397,7 +398,7 @@ void goto_inlinet::expand_function_call(
     dest.instructions.splice(next_target, tmp.instructions);
     target=next_target;
 
-    recursion_set.erase(identifier);
+    recursion_set.erase(recursion_it);
   }
   else // no body available
   {

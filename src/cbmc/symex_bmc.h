@@ -13,6 +13,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/message.h>
 
 #include <goto-symex/goto_symex.h>
+#include <goto-symex/symex_target_equation.h>
+#include <solvers/prop/prop_conv.h>
+#include <util/decision_procedure.h>
+#include <langapi/language_ui.h>
 
 class symex_bmct:
   public goto_symext,
@@ -22,12 +26,21 @@ public:
   symex_bmct(
     const namespacet &_ns,
     symbol_tablet &_new_symbol_table,
-    symex_targett &_target);
+    symex_targett &_target,
+    prop_convt& _prop_conv);
 
   // To show progress
   irept last_location;
 
   // Control unwinding.
+
+  bool is_incremental;
+  irep_idt incr_loop_id;
+  unsigned incr_max_unwind;
+  unsigned incr_min_unwind;
+
+  bool add_loop_check();
+  void update_loop_info(bool fully_unwound);
   
   void set_unwind_limit(unsigned limit)
   {
@@ -43,6 +56,10 @@ public:
     thread_loop_limits[thread_nr][id]=limit;
   }
 
+  prop_convt& prop_conv;
+
+  void set_ui(language_uit::uit _ui) { ui=_ui; }
+
   void set_unwind_loop_limit(
     const irep_idt &id,
     unsigned limit)
@@ -51,6 +68,26 @@ public:
   }
 
 protected:  
+  // use gui format
+  language_uit::uit ui;
+
+  // incremental unwinding
+
+  // returns true if the symbolic execution is to be interrupted for checking
+  virtual bool check_break(statet& state, const exprt &cond, 
+                           unsigned unwind);
+
+  // stores info to check whether loop has been fully unwound
+  typedef struct {
+    irep_idt id;
+    exprt guard;
+    exprt cond;
+    goto_symex_statet::framet::loop_infot *loop_info;
+    symex_targett::sourcet source;
+  } loop_condt;
+
+  loop_condt loop_cond;
+
   // We have
   // 1) a global limit (max_unwind)
   // 2) a limit per loop, all threads
@@ -69,7 +106,7 @@ protected:
   //
   // overloaded from goto_symext
   //
-  virtual void symex_step(
+  virtual bool symex_step(
     const goto_functionst &goto_functions,
     statet &state);
 

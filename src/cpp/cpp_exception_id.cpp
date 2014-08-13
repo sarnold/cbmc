@@ -20,6 +20,8 @@ Function: cpp_exception_list_rec
 
 \*******************************************************************/
 
+#include <iostream>
+
 void cpp_exception_list_rec(
   const typet &src,
   const namespacet &ns,
@@ -73,6 +75,7 @@ void cpp_exception_list_rec(
       return;
     }
   
+    std::cout << "XX: " << src.pretty() << std::endl;
   }
 }
 

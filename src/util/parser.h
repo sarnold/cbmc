@@ -12,37 +12,32 @@ class parsert:public messaget
 {
 public:
   std::istream *in;
+  locationt location;
   
-  std::string this_line, last_line;
+  std::string last_line;
   
   std::vector<exprt> stack;
   
   virtual void clear()
   {
     line_no=0;
-    previous_line_no=0;
-    column=1;
     stack.clear();
     location.clear();
-    last_line.clear();
+    char_buffer.clear();
   }
   
   inline parsert() { clear(); }
+  
   virtual ~parsert() { }
 
-  // The following are for the benefit of the scanner
-  
-  inline bool read(char &ch)
+  virtual bool read(char &ch)
   {
-    if(!in->read(&ch, 1)) return false;
+    if(!read2(ch)) return false;
 
     if(ch=='\n')
-    {
-      last_line.swap(this_line);
-      this_line.clear();
-    }
+      last_line="";
     else
-      this_line+=ch;
+      last_line+=ch;
     
     return true;
   }
@@ -51,35 +46,46 @@ public:
   {
     return true;
   }
-
-  inline bool eof()
+   
+  virtual bool peek(char &ch)
   {
-    return in->eof();
+    if(!char_buffer.empty())
+    {
+      ch=char_buffer.front();
+      return true;
+    }
+    
+    if(!in->read(&ch, 1)) 
+      return false;
+     
+    char_buffer.push_back(ch);
+    return true;
+  }
+  
+  virtual bool eof()
+  {
+    return char_buffer.empty() && in->eof();
   }
   
   void parse_error(
     const std::string &message,
     const std::string &before);
     
-  inline void inc_line_no()
+  void inc_line_no()
   {
     ++line_no;
-    column=1;
+    location.set_line(line_no);
   }
   
-  inline void set_line_no(unsigned _line_no)
+  void set_line_no(unsigned _line_no)
   {
     line_no=_line_no;
+    location.set_line(line_no);
   }
   
   inline void set_file(const irep_idt &file)
   {
     location.set_file(file);
-  }
-  
-  inline irep_idt get_file() const
-  {
-    return location.get_file();
   }
   
   inline unsigned get_line_no() const
@@ -89,30 +95,24 @@ public:
 
   inline void set_location(exprt &e)
   {
-    // Only set line number when needed, as this destroys sharing.
-    if(previous_line_no!=line_no)
-    {
-      previous_line_no=line_no;
-      location.set_line(line_no);
-    }
-    
     e.location()=location;
   }
-  
-  inline void set_function(const irep_idt &function)
+
+private:
+  virtual bool read2(char &ch)
   {
-    location.set_function(function);
+    if(!char_buffer.empty())
+    {
+      ch=char_buffer.front();
+      char_buffer.pop_front();
+      return true;
+    }
+    
+    return in->read(&ch, 1)!=0;
   }
-  
-  inline void advance_column(unsigned token_width)
-  {
-    column+=token_width;
-  }
-  
-protected:
-  locationt location;
-  unsigned line_no, previous_line_no;
-  unsigned column;
+   
+  unsigned line_no;
+  std::list<char> char_buffer;
 };
  
 exprt &_newstack(parsert &parser, unsigned &x);
@@ -139,10 +139,5 @@ exprt &_newstack(parsert &parser, unsigned &x);
           } \
         } \
     } while(0)
-
-// The following tracks the column of the token, and is nicely explained here:
-// http://oreilly.com/linux/excerpts/9780596155971/error-reporting-recovery.html
-
-#define YY_USER_ACTION PARSER.advance_column(yyleng);
 
 #endif

@@ -12,3 +12,7 @@ show:
 			vim -o "$$dir/*.c" "$$dir/*.out"; \
 		fi; \
 	done;
+
+clean:
+	@rm -f *.log
+	@for dir in *; do rm -f $$dir/*.out; done;

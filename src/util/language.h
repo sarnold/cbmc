@@ -13,14 +13,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iosfwd>
 #include <string>
 
-#include "message.h"
-
 class symbol_tablet;
 class exprt;
+class message_handlert;
 class namespacet;
 class typet;
 
-class languaget:public messaget
+class languaget
 {
 public:
   // parse file
@@ -28,11 +27,13 @@ public:
   virtual bool preprocess(
     std::istream &instream,
     const std::string &path,
-    std::ostream &outstream) { return false; }
+    std::ostream &outstream,
+    message_handlert &message_handler) { return false; }
   
   virtual bool parse(
     std::istream &instream,
-    const std::string &path)=0;
+    const std::string &path,
+    message_handlert &message_handler)=0;
   
   // add external dependencies of a given module to set
   
@@ -48,18 +49,21 @@ public:
   // final adjustments, e.g., initialization and call to main()
 
   virtual bool final(
-    symbol_tablet &symbol_table);
+    symbol_tablet &symbol_table,
+    message_handlert &message_handler);
 
   // type check interfaces of currently parsed file
 
   virtual bool interfaces(
-    symbol_tablet &symbol_table);
+    symbol_tablet &symbol_table,
+    message_handlert &message_handler);
 
   // type check a module in the currently parsed file
 
   virtual bool typecheck(
     symbol_tablet &symbol_table,
-    const std::string &module)=0;
+    const std::string &module,
+    message_handlert &message_handler)=0;
   
   // language id / description
   
@@ -88,6 +92,7 @@ public:
     const std::string &code,
     const std::string &module,
     exprt &expr,
+    message_handlert &message_handler,
     const namespacet &ns)=0;
                        
   virtual languaget *new_language()=0;

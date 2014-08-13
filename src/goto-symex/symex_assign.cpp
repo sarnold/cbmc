@@ -7,9 +7,6 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/expr_util.h>
-#include <util/byte_operators.h>
-
-#include <ansi-c/c_types.h>
 
 #include "goto_symex.h"
 #include "goto_symex_state.h"
@@ -38,7 +35,7 @@ void goto_symext::symex_assign(
   replace_nondet(lhs);
   replace_nondet(rhs);
   
-  if(rhs.id()==ID_side_effect)
+  if(rhs.id()==ID_sideeffect)
   {
     const side_effect_exprt &side_effect_expr=to_side_effect_expr(rhs);
     const irep_idt &statement=side_effect_expr.get_statement();
@@ -141,18 +138,7 @@ void goto_symext::symex_assign_rec(
   else if(lhs.id()==ID_index)
     symex_assign_array(state, to_index_expr(lhs), full_lhs, rhs, guard, visibility);
   else if(lhs.id()==ID_member)
-  {
-    const typet &type=ns.follow(to_member_expr(lhs).struct_op().type());
-    if(type.id()==ID_struct)
-      symex_assign_struct_member(state, to_member_expr(lhs), full_lhs, rhs, guard, visibility);
-    else if(type.id()==ID_union)
-    {
-      // should have been replaced by byte_extract
-      throw "symex_assign_rec: unexpected assignment to union member";
-    }
-    else
-      assert(false);
-  }
+    symex_assign_member(state, to_member_expr(lhs), full_lhs, rhs, guard, visibility);
   else if(lhs.id()==ID_if)
     symex_assign_if(state, to_if_expr(lhs), full_lhs, rhs, guard, visibility);
   else if(lhs.id()==ID_typecast)
@@ -167,10 +153,7 @@ void goto_symext::symex_assign_rec(
   }
   else if(lhs.id()==ID_byte_extract_little_endian ||
           lhs.id()==ID_byte_extract_big_endian)
-  {
-    symex_assign_byte_extract(
-      state, to_byte_extract_expr(lhs), full_lhs, rhs, guard, visibility);
-  }
+    symex_assign_byte_extract(state, lhs, full_lhs, rhs, guard, visibility);
   else if(lhs.id()==ID_complex_real ||
           lhs.id()==ID_complex_imag)
   {
@@ -363,7 +346,7 @@ void goto_symext::symex_assign_array(
 
 /*******************************************************************\
 
-Function: goto_symext::symex_assign_struct_member
+Function: goto_symext::symex_assign_member
 
   Inputs:
 
@@ -373,7 +356,7 @@ Function: goto_symext::symex_assign_struct_member
 
 \*******************************************************************/
 
-void goto_symext::symex_assign_struct_member(
+void goto_symext::symex_assign_member(
   statet &state,
   const member_exprt &lhs,
   const exprt &full_lhs,
@@ -381,15 +364,20 @@ void goto_symext::symex_assign_struct_member(
   guardt &guard,
   visibilityt visibility)
 {
-  // Symbolic execution of a struct member assignment.
+  // symbolic execution of a struct member assignment
 
-  // lhs must be member operand, which
-  // takes one operand, which must be a structure.
+  // lhs must be member operand
+  // that takes one operands, which must be a structure
 
   exprt lhs_struct=lhs.op0();
-  const struct_typet &struct_type=to_struct_type(ns.follow(lhs_struct.type()));
+  typet struct_type=ns.follow(lhs_struct.type());
 
-  const irep_idt &component_name=lhs.get_component_name();
+  if(struct_type.id()!=ID_struct &&
+     struct_type.id()!=ID_union)
+    throw "member must take struct/union type operand but got "
+          +struct_type.pretty();
+
+  const irep_idt &component_name=lhs.get(ID_component_name);
 
   // typecasts involved? C++ does that for inheritance.
   if(lhs_struct.id()==ID_typecast)
@@ -405,9 +393,10 @@ void goto_symext::symex_assign_struct_member(
     {
       // remove the type cast, we assume that the member is there
       exprt tmp=lhs_struct.op0();
-      const typet &op0_type=ns.follow(tmp.type());
+      struct_type=ns.follow(tmp.type());
 
-      if(op0_type.id()==ID_struct)
+      if(struct_type.id()==ID_struct ||
+         struct_type.id()==ID_union)
         lhs_struct=tmp;
       else
         return; // ignore and give up
@@ -505,14 +494,17 @@ Function: goto_symext::symex_assign_byte_extract
 
 void goto_symext::symex_assign_byte_extract(
   statet &state,
-  const byte_extract_exprt &lhs,
+  const exprt &lhs,
   const exprt &full_lhs,
   const exprt &rhs,
   guardt &guard,
   visibilityt visibility)
 {
-  // we have byte_extract_X(object, offset)=value
-  // turn into object=byte_update_X(object, offset, value)
+  // we have byte_extract_X(l, b)=r
+  // turn into l=byte_update_X(l, b, r)
+
+  if(lhs.operands().size()!=2)
+    throw "byte_extract must have two operands";
 
   exprt new_rhs;
 
@@ -523,12 +515,12 @@ void goto_symext::symex_assign_byte_extract(
   else
     assert(false);
 
-  new_rhs.copy_to_operands(lhs.op(), lhs.offset(), rhs);
-  new_rhs.type()=lhs.op().type();
+  new_rhs.copy_to_operands(lhs.op0(), lhs.op1(), rhs);
+  new_rhs.type()=lhs.op0().type();
   
   exprt new_full_lhs=add_to_lhs(full_lhs, lhs);
 
   symex_assign_rec(
-    state, lhs.op(), new_full_lhs, new_rhs, guard, visibility);
+    state, lhs.op0(), new_full_lhs, new_rhs, guard, visibility);
 }
 

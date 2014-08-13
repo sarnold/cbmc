@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
+#include <cstdlib>
 
 #include <util/expr_util.h>
 #include <util/i2string.h>

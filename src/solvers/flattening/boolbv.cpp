@@ -7,10 +7,10 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
+#include <cstdlib>
 #include <map>
 #include <set>
 #include <iostream>
-#include <cstdlib> // abort()
 
 #include <util/symbol.h>
 #include <util/mp_arith.h>
@@ -21,7 +21,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/prefix.h>
 #include <util/std_expr.h>
 #include <util/threeval.h>
-#include <util/string2int.h>
 
 #include <ansi-c/string_constant.h>
 
@@ -150,14 +149,16 @@ const bvt& boolbvt::convert_bv(const exprt &expr)
   // even though we are inserting more elements recursively.
 
   convert_bitvector(expr, cache_result.first->second);
-  
+
   // check
-  forall_literals(it, cache_result.first->second)
+  forall_literals(it, cache_result.first->second) {
+    if(freeze_all && !it->is_constant()) prop.set_frozen(*it);
     if(it->var_no()==literalt::unused_var_no())
     {
       std::cout << "unused_var_no: " << expr.pretty() << std::endl;
       assert(false);
     }
+  }
 
   return cache_result.first->second;
 }
@@ -443,7 +444,7 @@ void boolbvt::convert_bv_literals(const exprt &expr, bvt &bv)
     throw "bv_literals with wrong size";
 
   for(unsigned i=0; i<width; i++)
-    bv[i].set(unsafe_string2int(id2string(bv_sub[i].id())));
+    bv[i].set(atol(bv_sub[i].id().c_str()));
 }
 
 /*******************************************************************\
@@ -699,6 +700,8 @@ bool boolbvt::boolbv_set_equality_to_true(const equal_exprt &expr)
       to_symbol_expr(expr.lhs()).get_identifier();
 
     map.set_literals(identifier, type, bv1);
+
+    if(freeze_all) set_frozen(bv1);
 
     return false;
   }

@@ -3350,16 +3350,14 @@ void smt1_convt::convert_literal(const literalt l)
     out << "false";
   else if(l==const_literal(true))
     out << "true";
-  else
-  {
-    if(l.sign())
-      out << "(not ";
-  
-    out << "B" << l.var_no();
 
-    if(l.sign())
-      out << ")";  
-  }
+  if(l.sign())
+    out << "(not ";
+  
+  out << "B" << l.var_no();
+
+  if(l.sign())
+    out << ")";  
 }
 
 /*******************************************************************\

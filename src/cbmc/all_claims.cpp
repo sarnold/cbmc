@@ -53,6 +53,7 @@ bool bmct::all_claims(
   status() << "Passing problem to " << solver.decision_procedure_text() << eom;
 
   solver.set_message_handler(get_message_handler());
+  solver.set_verbosity(get_verbosity());
 
   // stop the time
   absolute_timet sat_start=current_time();
@@ -98,8 +99,15 @@ bool bmct::all_claims(
     }
   }
   
-  cover_goalst cover_goals(solver);
-  
+  cover_goalst cover_goals(symex.prop_conv);
+
+  //set activation literal for incremental checking
+  cover_goals.activation_literal = equation.current_activation_literal();
+
+#if 0
+  std::cout << "cover_goals.activation_literal = " << cover_goals.activation_literal << std::endl;
+#endif
+
   for(goal_mapt::const_iterator
       it=goal_map.begin();
       it!=goal_map.end();
@@ -109,9 +117,10 @@ bool bmct::all_claims(
     // The following is TRUE if the conjunction is empty.
     literalt p=!solver.convert(conjunction(it->second.conjuncts));
     cover_goals.add(p);
+    cover_goals.goals.back().covered = it->second.covered;
   }
 
-  status() << "Running " << solver.decision_procedure_text() << eom;
+  status() << "Running " << symex.prop_conv.decision_procedure_text() << eom;
 
   cover_goals();  
 
@@ -123,7 +132,7 @@ bool bmct::all_claims(
              << (sat_stop-sat_start) << "s" << eom;
   }
   
-  // report
+  // report 
   if(ui!=ui_message_handlert::XML_UI)
   {
     status() << eom;
@@ -133,11 +142,15 @@ bool bmct::all_claims(
   std::list<cover_goalst::cover_goalt>::const_iterator g_it=
     cover_goals.goals.begin();
     
-  for(goal_mapt::const_iterator
+  bool res = true;
+
+  for(goal_mapt::iterator
       it=goal_map.begin();
       it!=goal_map.end();
       it++, g_it++)
   {
+    it->second.covered = g_it->covered;
+    if(!g_it->covered) res = false;
     if(ui==ui_message_handlert::XML_UI)
     {
       xmlt xml_result("result");
@@ -162,7 +175,6 @@ bool bmct::all_claims(
   status() << "** " << cover_goals.number_covered()
            << " of " << cover_goals.size() << " failed ("
            << cover_goals.iterations() << " iterations)" << eom;
-  
-  return false;
-}
 
+  return res;
+}

@@ -45,7 +45,7 @@ Function: goto_symext::replace_nondet
 
 void goto_symext::replace_nondet(exprt &expr)
 {
-  if(expr.id()==ID_side_effect &&
+  if(expr.id()==ID_sideeffect &&
      expr.get(ID_statement)==ID_nondet)
   {
     exprt new_expr(ID_nondet_symbol, expr.type());

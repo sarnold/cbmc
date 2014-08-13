@@ -2,7 +2,6 @@
 #define POLYNOMIAL_H
 
 #include <vector>
-#include <map>
 
 #include <util/expr.h>
 

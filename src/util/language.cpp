@@ -21,7 +21,9 @@ Function: languaget::final
 
 \*******************************************************************/
 
-bool languaget::final(symbol_tablet &symbol_table)
+bool languaget::final(
+  symbol_tablet &symbol_table,
+  message_handlert &message_handler)
 {
   return false;
 }
@@ -38,7 +40,9 @@ Function: languaget::interfaces
 
 \*******************************************************************/
 
-bool languaget::interfaces(symbol_tablet &symbol_table)
+bool languaget::interfaces(
+  symbol_tablet &symbol_table,
+  message_handlert &message_handler)
 {
   return false;
 }

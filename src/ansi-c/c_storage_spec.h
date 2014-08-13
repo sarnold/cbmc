@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_ANSI_C_C_STORAGE_SPEC_H
 #define CPROVER_ANSI_C_C_STORAGE_SPEC_H
 
-#include <util/type.h>
+#include <util/expr.h>
 
 class c_storage_spect
 {
@@ -17,12 +17,6 @@ public:
   c_storage_spect()
   {
     clear();
-  }
-  
-  explicit c_storage_spect(const typet &type)
-  {
-    clear();
-    read(type);
   }
   
   void clear()
@@ -38,6 +32,8 @@ public:
   bool is_typedef, is_extern, is_static, is_register,
        is_inline, is_thread_local;
   
+  std::string as_string() const;
+
   friend bool operator == (
     const c_storage_spect &a,
     const c_storage_spect &b)
@@ -70,8 +66,6 @@ public:
     
     return a;
   }
-  
-  void read(const typet &type);
 };
 
 #endif

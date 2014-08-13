@@ -87,13 +87,14 @@ Function: cpp_languaget::preprocess
 bool cpp_languaget::preprocess(
   std::istream &instream,
   const std::string &path,
-  std::ostream &outstream)
+  std::ostream &outstream,
+  message_handlert &message_handler)
 {
   if(config.ansi_c.mode==configt::ansi_ct::MODE_GCC_C)
     config.ansi_c.mode=configt::ansi_ct::MODE_GCC_CPP;
 
   if(path=="")
-    return c_preprocess(instream, outstream, get_message_handler());
+    return c_preprocess(instream, outstream, message_handler);
 
   // check extension
 
@@ -110,7 +111,7 @@ bool cpp_languaget::preprocess(
     return false;
   }
 
-  return c_preprocess(path, outstream, get_message_handler());
+  return c_preprocess(path, outstream, message_handler);
 }
 
 /*******************************************************************\
@@ -127,7 +128,8 @@ Function: cpp_languaget::parse
 
 bool cpp_languaget::parse(
   std::istream &instream,
-  const std::string &path)
+  const std::string &path,
+  message_handlert &message_handler)
 {
   // store the path
 
@@ -139,7 +141,7 @@ bool cpp_languaget::parse(
 
   cpp_internal_additions(o_preprocessed);
 
-  if(preprocess(instream, path, o_preprocessed))
+  if(preprocess(instream, path, o_preprocessed, message_handler))
     return true;
 
   std::istringstream i_preprocessed(o_preprocessed.str());
@@ -149,7 +151,7 @@ bool cpp_languaget::parse(
   cpp_parser.clear();
   cpp_parser.set_file(path);
   cpp_parser.in=&i_preprocessed;
-  cpp_parser.set_message_handler(get_message_handler());
+  cpp_parser.set_message_handler(message_handler);
   cpp_parser.grammar=cpp_parsert::LANGUAGE;
 
   switch(config.ansi_c.mode)
@@ -206,16 +208,17 @@ Function: cpp_languaget::typecheck
 
 bool cpp_languaget::typecheck(
   symbol_tablet &symbol_table,
-  const std::string &module)
+  const std::string &module,
+  message_handlert &message_handler)
 {
   if(module=="") return false;
 
   symbol_tablet new_symbol_table;
 
-  if(cpp_typecheck(cpp_parse_tree, new_symbol_table, module, get_message_handler()))
+  if(cpp_typecheck(cpp_parse_tree, new_symbol_table, module, message_handler))
     return true;
 
-  return linking(symbol_table, new_symbol_table, get_message_handler());
+  return linking(symbol_table, new_symbol_table, message_handler);
 }
 
 /*******************************************************************\
@@ -230,10 +233,11 @@ Function: cpp_languaget::final
 
 \*******************************************************************/
 
-bool cpp_languaget::final(symbol_tablet &symbol_table)
+bool cpp_languaget::final(
+  symbol_tablet &symbol_table,
+  message_handlert &message_handler)
 {
-  if(entry_point(symbol_table, "c::main", get_message_handler()))
-    return true;
+  if(entry_point(symbol_table, "c::main", message_handler)) return true;
 
   return false;
 }
@@ -400,6 +404,7 @@ bool cpp_languaget::to_expr(
   const std::string &code,
   const std::string &module,
   exprt &expr,
+  message_handlert &message_handler,
   const namespacet &ns)
 {
   expr.make_nil();
@@ -413,7 +418,7 @@ bool cpp_languaget::to_expr(
   cpp_parser.clear();
   cpp_parser.set_file(irep_idt());
   cpp_parser.in=&i_preprocessed;
-  cpp_parser.set_message_handler(get_message_handler());
+  cpp_parser.set_message_handler(message_handler);
   cpp_parser.grammar=cpp_parsert::EXPRESSION;
   cpp_scanner_init();
 
@@ -427,7 +432,7 @@ bool cpp_languaget::to_expr(
     //expr.swap(cpp_parser.parse_tree.declarations.front());
 
     // typecheck it
-    result=cpp_typecheck(expr, get_message_handler(), ns);
+    result=cpp_typecheck(expr, message_handler, ns);
   }
 
   // save some memory

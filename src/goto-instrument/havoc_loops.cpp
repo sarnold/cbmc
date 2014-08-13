@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/remove_skip.h>
 
-#include "function_modifies.h"
 #include "havoc_loops.h"
 
 class havoc_loopst
@@ -21,21 +20,17 @@ class havoc_loopst
 public:
   typedef goto_functionst::goto_functiont goto_functiont;
   
-  havoc_loopst(
-    function_modifiest &_function_modifies,
-    goto_functiont &_goto_function):
+  explicit havoc_loopst(goto_functiont &_goto_function):
     goto_function(_goto_function),
     local_may_alias(_goto_function),
-    function_modifies(_function_modifies),
     natural_loops(_goto_function.body)
   {
     havoc_loops();
   }
-  
+
 protected:
   goto_functiont &goto_function;
   local_may_aliast local_may_alias;
-  function_modifiest &function_modifies;
   natural_loops_mutablet natural_loops;
   
   typedef std::set<exprt> modifiest;
@@ -52,10 +47,12 @@ protected:
     const modifiest &modifies,
     goto_programt &dest);
   
-  void get_modifies(
-    const loopt &,
-    modifiest &);
-
+  void get_modifies(const loopt &, modifiest &);
+  void get_modifies_lhs(
+    goto_programt::const_targett,
+    const exprt &lhs,
+    modifiest &modifies);
+  
   goto_programt::targett get_loop_exit(const loopt &);
 };
 
@@ -180,6 +177,45 @@ void havoc_loopst::havoc_loop(
 
 /*******************************************************************\
 
+Function: havoc_loopst::get_modifies_lhs
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void havoc_loopst::get_modifies_lhs(
+  goto_programt::const_targett t,
+  const exprt &lhs,
+  modifiest &modifies)
+{
+  if(lhs.id()==ID_symbol)
+    modifies.insert(lhs);
+  else if(lhs.id()==ID_dereference)
+  {
+    modifiest m=local_may_alias.get(t, to_dereference_expr(lhs).pointer());
+    for(modifiest::const_iterator m_it=m.begin();
+        m_it!=m.end(); m_it++)
+      get_modifies_lhs(t, *m_it, modifies);
+  }
+  else if(lhs.id()==ID_member)
+  {
+  }
+  else if(lhs.id()==ID_index)
+  {
+  }
+  else if(lhs.id()==ID_if)
+  {
+    get_modifies_lhs(t, to_if_expr(lhs).true_case(), modifies);
+    get_modifies_lhs(t, to_if_expr(lhs).false_case(), modifies);
+  }
+}
+
+/*******************************************************************\
+
 Function: havoc_loopst::get_modifies
 
   Inputs:
@@ -202,19 +238,12 @@ void havoc_loopst::get_modifies(
     if(instruction.is_assign())
     {
       const exprt &lhs=to_code_assign(instruction.code).lhs();
-      function_modifies.get_modifies_lhs(local_may_alias, *i_it, lhs, modifies);
+      get_modifies_lhs(*i_it, lhs, modifies);
     }
     else if(instruction.is_function_call())
     {
-      const code_function_callt &code_function_call=
-        to_code_function_call(instruction.code);
-      const exprt &lhs=code_function_call.lhs();
-      
-      // return value assignment
-      if(lhs.is_not_nil())
-        function_modifies.get_modifies_lhs(local_may_alias, *i_it, lhs, modifies);
-        
-      function_modifies(code_function_call.function(), modifies);
+      const exprt &lhs=to_code_function_call(instruction.code).lhs();
+      get_modifies_lhs(*i_it, lhs, modifies);
     }
   }
 }
@@ -256,8 +285,6 @@ Function: havoc_loops
 
 void havoc_loops(goto_functionst &goto_functions)
 {
-  function_modifiest function_modifies(goto_functions);
-
   Forall_goto_functions(it, goto_functions)
-    havoc_loopst(function_modifies, it->second);
+    havoc_loopst(it->second);
 }

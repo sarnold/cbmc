@@ -7,9 +7,11 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
+#include <iostream>
 
 #include <util/i2string.h>
 #include <util/std_expr.h>
+#include <solvers/prop/literal_expr.h>
 #include <util/expr_util.h>
 
 #include <langapi/language_util.h>
@@ -33,7 +35,7 @@ Function: symex_target_equationt::symex_target_equationt
 \*******************************************************************/
 
 symex_target_equationt::symex_target_equationt(
-  const namespacet &_ns):ns(_ns)
+  const namespacet &_ns):is_incremental(false),ns(_ns)
 {
 }
 
@@ -589,17 +591,25 @@ void symex_target_equationt::constraint(
 
 Function: symex_target_equationt::convert
 
-  Inputs: converter
+ Inputs: converter
 
  Outputs: 
 
- Purpose:
+ Purpose: 
 
 \*******************************************************************/
 
 void symex_target_equationt::convert(
    prop_convt &prop_conv)
 {
+  #if 0
+  std::cout << "Converted SSA steps: " << std::endl;
+  for(SSA_stepst::iterator it=SSA_steps.begin();;
+      it!=SSA_steps.end(); it++) {
+    if(it->converted) it->output(ns,std::cout);
+  }
+  #endif
+
   convert_guards(prop_conv);
   convert_assignments(prop_conv);
   convert_decls(prop_conv);
@@ -613,7 +623,7 @@ void symex_target_equationt::convert(
 
 Function: symex_target_equationt::convert_assignments
 
-  Inputs: decision procedure
+ Inputs: decision procedure
 
  Outputs: -
 
@@ -622,13 +632,16 @@ Function: symex_target_equationt::convert_assignments
 \*******************************************************************/
 
 void symex_target_equationt::convert_assignments(
-  decision_proceduret &decision_procedure) const
+  decision_proceduret &decision_procedure)
 {
-  for(SSA_stepst::const_iterator it=SSA_steps.begin();
+  for(SSA_stepst::iterator it=SSA_steps.begin();
       it!=SSA_steps.end(); it++)
   {
-    if(it->is_assignment() && !it->ignore)
+    if(it->is_assignment() && !it->ignore && !it->converted)
+    {
+      it->converted = true;
       decision_procedure.set_to_true(it->cond_expr);
+    }
   }
 }
 
@@ -636,7 +649,7 @@ void symex_target_equationt::convert_assignments(
 
 Function: symex_target_equationt::convert_decls
 
-  Inputs: converter
+ Inputs: converter
 
  Outputs: -
 
@@ -645,13 +658,14 @@ Function: symex_target_equationt::convert_decls
 \*******************************************************************/
 
 void symex_target_equationt::convert_decls(
-  prop_convt &prop_conv) const
+  prop_convt &prop_conv)
 {
-  for(SSA_stepst::const_iterator it=SSA_steps.begin();
+  for(SSA_stepst::iterator it=SSA_steps.begin();
       it!=SSA_steps.end(); it++)
   {
-    if(it->is_decl() && !it->ignore)
+    if(it->is_decl() && !it->ignore && !it->converted)
     {
+      it->converted = true;
       // The result is not used, these have no impact on
       // the satisfiability of the formula.
       prop_conv.convert(it->cond_expr);
@@ -663,7 +677,7 @@ void symex_target_equationt::convert_decls(
 
 Function: symex_target_equationt::convert_guards
 
-  Inputs: converter
+ Inputs: converter
 
  Outputs: -
 
@@ -679,7 +693,7 @@ void symex_target_equationt::convert_guards(
   {
     if(it->ignore)
       it->guard_literal=const_literal(false);
-    else
+    else 
       it->guard_literal=prop_conv.convert(it->guard);
   }
 }
@@ -688,7 +702,7 @@ void symex_target_equationt::convert_guards(
 
 Function: symex_target_equationt::convert_assumptions
 
-  Inputs: converter
+ Inputs: converter
 
  Outputs: -
 
@@ -704,7 +718,7 @@ void symex_target_equationt::convert_assumptions(
   {
     if(it->is_assume())
     {
-      if(it->ignore)
+      if(it->ignore) 
         it->cond_literal=const_literal(true);
       else
         it->cond_literal=prop_conv.convert(it->cond_expr);
@@ -716,7 +730,7 @@ void symex_target_equationt::convert_assumptions(
 
 Function: symex_target_equationt::convert_constraints
 
-  Inputs: decision procedure
+ Inputs: decision procedure
 
  Outputs: -
 
@@ -725,17 +739,18 @@ Function: symex_target_equationt::convert_constraints
 \*******************************************************************/
 
 void symex_target_equationt::convert_constraints(
-  decision_proceduret &decision_procedure) const
+  decision_proceduret &decision_procedure)
 {
-  for(SSA_stepst::const_iterator it=SSA_steps.begin();
+  for(SSA_stepst::iterator it=SSA_steps.begin();
       it!=SSA_steps.end();
       it++)
   {
     if(it->is_constraint())
     {
-      if(it->ignore)
+      if(it->ignore || it->converted)
         continue;
 
+      it->converted = true;
       decision_procedure.set_to_true(it->cond_expr);
     }
   }
@@ -745,7 +760,7 @@ void symex_target_equationt::convert_constraints(
 
 Function: symex_target_equationt::convert_assertions
 
-  Inputs: converter
+ Inputs: converter
 
  Outputs: -
 
@@ -764,19 +779,61 @@ void symex_target_equationt::convert_assertions(
   if(number_of_assertions==0)
     return;
 
+  exprt assumption=true_exprt();
+
+  //literal a_k to be added to assertions clauses to de-/activate them for incr. solving
+  literalt activation_literal; 
+  if(is_incremental)
+  {
+    activation_literal = prop_conv.convert(
+      symbol_exprt("goto_symex::\\act$"+
+      i2string(activate_assertions.size()), bool_typet()));
+
+    if(!activate_assertions.empty()) {
+      literalt last_activation_literal = activate_assertions.back();
+      activate_assertions.pop_back();
+      activate_assertions.push_back(!last_activation_literal);    
+    }
+    activate_assertions.push_back(!activation_literal);
+
+    //set assumptions (a_0 ... -a_k) for incremental solving
+    prop_conv.set_assumptions(activate_assertions);
+  }
+
   if(number_of_assertions==1)
   {
     for(SSA_stepst::iterator it=SSA_steps.begin();
         it!=SSA_steps.end(); it++)
     {
-      if(it->is_assert())
+      if(it->is_assert() && !it->converted)
       {
-        prop_conv.set_to_false(it->cond_expr);
+        it->converted = true;
+
+#if 0
+        std::cout << "assertion: " << from_expr(ns,"",it->cond_expr) 
+          << std::endl;
+#endif
+
+        if(is_incremental) { 
+          prop_conv.set_to_true(or_exprt(literal_exprt(activation_literal),
+            not_exprt(it->cond_expr)));
+	}
+        else {
+          prop_conv.set_to_false(it->cond_expr);
+	}
         it->cond_literal=const_literal(false);
         return; // prevent further assumptions!
       }
       else if(it->is_assume())
-        prop_conv.set_to_true(it->cond_expr);
+      {
+        if(is_incremental) { 
+          prop_conv.set_to_true(or_exprt(literal_exprt(activation_literal),
+            it->cond_expr));
+	}
+        else {
+          prop_conv.set_to_true(it->cond_expr);
+	}
+      }
     }
 
     assert(false); // unreachable
@@ -785,22 +842,31 @@ void symex_target_equationt::convert_assertions(
   // We do (NOT a1) OR (NOT a2) ...
   // where the a's are the assertions
   or_exprt::operandst disjuncts;
-  disjuncts.reserve(number_of_assertions);
+  disjuncts.reserve(
+    is_incremental ? number_of_assertions+1 : number_of_assertions);
 
-  exprt assumption=true_exprt();
+  if(is_incremental) 
+  {
+    //assumptions for incremental solving: 
+    // (a_0 ... -a_k-1) --> (a_0 ... a_k-1 -a_k)
+    disjuncts.push_back(literal_exprt(activation_literal));
+  }
 
   for(SSA_stepst::iterator it=SSA_steps.begin();
-      it!=SSA_steps.end(); it++)
+      it!=SSA_steps.end(); it++) 
   {
-    if(it->is_assert())
+    if(it->is_assert() && !it->converted)
     {
+      it->converted = true;
+
       implies_exprt implication(
         assumption,
         it->cond_expr);
+
+      std::cout << "assertion: " << from_expr(ns,"",it->cond_expr) << std::endl;
       
       // do the conversion
       it->cond_literal=prop_conv.convert(implication);
-
       // store disjunct
       disjuncts.push_back(literal_exprt(!it->cond_literal));
     }
@@ -812,15 +878,77 @@ void symex_target_equationt::convert_assertions(
     }
   }
 
-  // the below is 'true' if there are no assertions
+  // if(!disjuncts.empty())
   prop_conv.set_to_true(disjunction(disjuncts));
+}
+
+/*******************************************************************\
+
+Function: symex_target_equationt::current_activation_literal
+
+  Inputs: 
+
+ Outputs: current activation literal
+
+ Purpose: get activation literal used for the assertions that have been 
+          translated in the most recent call to convert()
+
+\*******************************************************************/
+
+literalt symex_target_equationt::current_activation_literal() 
+{
+  if(!is_incremental) return const_literal(false);
+  return !activate_assertions.back();
+}
+
+/*******************************************************************\
+
+Function: symex_target_equationt::new_activation_literal
+
+  Inputs: 
+
+ Outputs: current activation literal
+
+ Purpose: generate activation literal, to be used if convert_assertions()
+          is never called in conversion, e.g. in cover_goals
+
+\*******************************************************************/
+
+void symex_target_equationt::new_activation_literal(prop_convt &prop_conv) 
+{
+  if(is_incremental)
+  {
+    literalt activation_literal = prop_conv.convert(
+      symbol_exprt("goto_symex::\\act$"+
+      i2string(activate_assertions.size()), bool_typet()));
+
+    if(!activate_assertions.empty()) {
+      literalt last_activation_literal = activate_assertions.back();
+      activate_assertions.pop_back();
+      activate_assertions.push_back(!last_activation_literal);    
+    }
+    activate_assertions.push_back(!activation_literal);
+
+    //set assumptions (a_0 ... -a_k) for incremental solving
+    prop_conv.set_assumptions(activate_assertions);
+
+#if 0
+    std::cout << "assumptions: "; 
+    for(bvt::iterator it = activate_assertions.begin();
+        it!=activate_assertions.end();it++) {
+      std::cout << *it << " ";
+    }
+    std::cout << std::endl;
+#endif
+
+  }
 }
 
 /*******************************************************************\
 
 Function: symex_target_equationt::convert_io
 
-  Inputs: decision procedure
+ Inputs: decision procedure
 
  Outputs: -
 
@@ -835,8 +963,9 @@ void symex_target_equationt::convert_io(
 
   for(SSA_stepst::iterator it=SSA_steps.begin();
       it!=SSA_steps.end(); it++)
-    if(!it->ignore)
+    if(!it->ignore && !it->converted)
     {
+      it->converted = true;
       for(std::list<exprt>::const_iterator
           o_it=it->io_args.begin();
           o_it!=it->io_args.end();
@@ -997,6 +1126,11 @@ void symex_target_equationt::SSA_stept::output(
     out << from_expr(ns, "", ssa_lhs) << std::endl;
 
   out << "Guard: " << from_expr(ns, "", guard) << std::endl;
+
+#if 0
+  out << "Ignore: " << ignore << std::endl;
+  out << "Converted: " << converted << std::endl;
+#endif
 }
 
 /*******************************************************************\

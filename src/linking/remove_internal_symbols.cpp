@@ -71,9 +71,9 @@ void get_symbols_rec(
 
 Function: remove_internal_symbols
 
-  Inputs: symbol table
+  Inputs: 
 
- Outputs: symbol table, with internal symbols removed
+ Outputs: 
 
  Purpose: A symbol is EXPORTED if it is a
           * non-static function with body that is not extern inline
@@ -137,7 +137,7 @@ void remove_internal_symbols(
     }
     else if(is_function)
     {
-      // body? not local (i.e., "static")?
+      // body? not local?
       if(has_body && !is_file_local)
         get_symbols_rec(ns, symbol, exported);
     }
@@ -148,6 +148,7 @@ void remove_internal_symbols(
       if((has_initializer || !symbol.is_extern) && 
          !is_file_local)
       {
+        exported.insert(symbol.name);
         get_symbols_rec(ns, symbol, exported);
       }
     }

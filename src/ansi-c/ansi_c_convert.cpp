@@ -89,7 +89,7 @@ Function: ansi_c_convertt::convert_expr
 
 void ansi_c_convertt::convert_expr(exprt &expr)
 {
-  if(expr.id()==ID_side_effect)
+  if(expr.id()==ID_sideeffect)
   {
     const irep_idt &statement=expr.get(ID_statement);
 

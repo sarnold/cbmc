@@ -170,13 +170,7 @@ const boolbv_widtht::entryt &boolbv_widtht::get_entry(const typet &type) const
       entry.total_width=0;
     }
     else
-    {
-      mp_integer total=array_size*sub_width;
-      if(total>(1<<30)) // realistic limit
-        throw "array too large for flattening";
-
-      entry.total_width=integer2unsigned(total);
-    }
+      entry.total_width=integer2unsigned(array_size*sub_width);
   }
   else if(type_id==ID_vector)
   {
@@ -191,13 +185,7 @@ const boolbv_widtht::entryt &boolbv_widtht::get_entry(const typet &type) const
       entry.total_width=0;
     }
     else
-    {
-      mp_integer total=vector_size*sub_width;
-      if(total>(1<<30)) // realistic limit
-        throw "vector too large for flattening";
-
       entry.total_width=integer2unsigned(vector_size*sub_width);
-    }
   }
   else if(type_id==ID_complex)
   {
@@ -218,8 +206,7 @@ const boolbv_widtht::entryt &boolbv_widtht::get_entry(const typet &type) const
   else if(type_id==ID_c_enum ||
           type_id==ID_incomplete_c_enum)
   {
-    // these have a subtype
-    entry.total_width=type.subtype().get_int(ID_width);
+    entry.total_width=type.get_int(ID_width);
     assert(entry.total_width!=0);
   }
   else if(type_id==ID_pointer ||

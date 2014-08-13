@@ -286,9 +286,6 @@ inline char *getenv(const char *name)
 
 /* FUNCTION: realloc */
 
-inline void *malloc(__CPROVER_size_t malloc_size);
-inline void free(void *ptr);
-
 inline void *realloc(void *ptr, __CPROVER_size_t malloc_size)
 {
   __CPROVER_HIDE:;
@@ -318,8 +315,6 @@ inline void *realloc(void *ptr, __CPROVER_size_t malloc_size)
 }
 
 /* FUNCTION: valloc */
-
-inline void *malloc(__CPROVER_size_t malloc_size);
 
 inline void *valloc(__CPROVER_size_t malloc_size)
 {
