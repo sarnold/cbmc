@@ -223,6 +223,8 @@ Purpose:
 
 \*******************************************************************/
 
+#include <iostream>
+
 goto_programt::const_targett goto_program2codet::convert_instruction(
     goto_programt::const_targett target,
     goto_programt::const_targett upper_bound,
@@ -272,6 +274,7 @@ goto_programt::const_targett goto_program2codet::convert_instruction(
       dest.copy_to_operands(code_assertt(target->guard));
       dest.operands().back().add_source_location().set_comment(
           target->source_location.get_comment());
+      std::cout << "FOUND ASSERT\n";
       return target;
 
     case ASSUME:

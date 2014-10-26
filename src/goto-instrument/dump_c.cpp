@@ -53,6 +53,8 @@ Purpose:
 
 \*******************************************************************/
 
+#include <iostream>
+
 void dump_ct::operator()(std::ostream &os)
 {
   std::stringstream func_decl_stream;
@@ -239,7 +241,11 @@ void dump_ct::operator()(std::ostream &os)
       it=system_headers.begin();
       it!=system_headers.end();
       ++it)
+  {
     os << "#include <" << *it << ">" << std::endl;
+    std::cout << "INCLUDE: " << *it << "\n";
+  }
+  
   if(!system_headers.empty()) os << std::endl;
 
   if(global_var_stream.str().find("NULL")!=std::string::npos ||
